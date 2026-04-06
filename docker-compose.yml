@@ -1,0 +1,33 @@
+# Docker Compose configuration for copilot-api
+#
+# Quick start:
+#   docker compose up -d
+#
+# Then visit http://localhost:4141/admin to add your GitHub account
+
+services:
+  copilot-api:
+    image: ghcr.io/qlhazycoder/copilot-api:latest
+    container_name: copilot-api
+    ports:
+      - "4141:4141"
+    volumes:
+      # Persist account configuration
+      - copilot-data:/data
+    environment:
+      - PORT=4141
+      # Optional: Enable verbose logging
+      # - VERBOSE=true
+      # Optional: Rate limit (seconds between requests)
+      # - RATE_LIMIT=5
+      # - RATE_LIMIT_WAIT=true
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:4141/" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  copilot-data:

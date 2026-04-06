@@ -1,0 +1,5 @@
+{
+  "name": "copilot-api-subagent-marker",
+  "version": "1.0.0",
+  "description": "Inject SubagentStart marker context for copilot-api initiator override"
+}

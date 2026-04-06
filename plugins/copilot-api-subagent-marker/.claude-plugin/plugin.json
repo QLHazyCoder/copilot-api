@@ -1,0 +1,20 @@
+{
+  "name": "copilot-api-subagent-marker",
+  "version": "1.0.0",
+  "description": "Inject SubagentStart marker context for copilot-api initiator override.",
+  "author": {
+    "name": "QLHazyCoder",
+    "url": "https://github.com/QLHazyCoder"
+  },
+  "homepage": "https://github.com/QLHazyCoder/copilot-api#optional-claude-code-plugin",
+  "repository": "https://github.com/QLHazyCoder/copilot-api",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "copilot-api",
+    "subagent",
+    "hooks"
+  ],
+  "category": "Developer Tools",
+  "hooks": "hooks/hooks.json"
+}

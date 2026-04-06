@@ -1,0 +1,8 @@
+{
+  "deno.enable": false,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true,
+    "source.organizeImports": "never"
+  },
+  "typescript.tsdk": "node_modules/typescript/lib"
+}

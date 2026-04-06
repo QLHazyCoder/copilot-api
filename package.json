@@ -1,0 +1,62 @@
+{
+  "name": "copilot-api",
+  "version": "1.0.0",
+  "description": "Turn GitHub Copilot into OpenAI/Anthropic API compatible server. Usable with Claude Code!",
+  "keywords": [
+    "proxy",
+    "github-copilot",
+    "openai-compatible"
+  ],
+  "homepage": "https://github.com/QLHazyCoder/copilot-api",
+  "bugs": "https://github.com/QLHazyCoder/copilot-api/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/QLHazyCoder/copilot-api.git"
+  },
+  "author": "QLHazyCoder",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "bun run --watch ./src/main.ts",
+    "dev:finalize": "bun run lint:fix && bun run lint",
+    "knip": "knip-bun",
+    "lint": "eslint --cache",
+    "lint:all": "eslint --cache .",
+    "lint:fix": "eslint --fix ./src",
+    "prepare": "simple-git-hooks",
+    "start": "NODE_ENV=production bun run ./src/main.ts",
+    "typecheck": "tsc"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "bun run dev:finalize && bunx lint-staged"
+  },
+  "lint-staged": {
+    "*": "bun run lint --fix"
+  },
+  "dependencies": {
+    "@ai-sdk/provider": "^3.0.8",
+    "@ai-sdk/provider-utils": "^4.0.19",
+    "consola": "^3.4.2",
+    "fetch-event-stream": "^0.1.5",
+    "gpt-tokenizer": "^3.0.1",
+    "hono": "^4.9.9",
+    "proxy-from-env": "^1.1.0",
+    "srvx": "^0.8.9",
+    "undici": "^7.19.1",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@echristian/eslint-config": "^0.0.54",
+    "@types/bun": "^1.2.23",
+    "@types/proxy-from-env": "^1.0.4",
+    "eslint": "^9.37.0",
+    "knip": "^5.64.1",
+    "lint-staged": "^16.2.3",
+    "simple-git-hooks": "^2.13.1",
+    "tsdown": "^0.15.6",
+    "typescript": "^5.9.3"
+  }
+}

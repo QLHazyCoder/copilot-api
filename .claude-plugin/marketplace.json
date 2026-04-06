@@ -1,0 +1,32 @@
+{
+  "name": "copilot-api-marketplace",
+  "owner": {
+    "name": "QLHazyCoder"
+  },
+  "metadata": {
+    "description": "Marketplace for optional Claude Code plugin helpers used with copilot-api.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "copilot-api-subagent-marker",
+      "source": "./plugins/copilot-api-subagent-marker",
+      "description": "Inject SubagentStart marker context so copilot-api can distinguish initiator overrides for subagents.",
+      "version": "1.0.0",
+      "author": {
+        "name": "QLHazyCoder",
+        "url": "https://github.com/QLHazyCoder"
+      },
+      "homepage": "https://github.com/QLHazyCoder/copilot-api#optional-claude-code-plugin",
+      "repository": "https://github.com/QLHazyCoder/copilot-api",
+      "license": "MIT",
+      "keywords": [
+        "claude-code",
+        "copilot-api",
+        "subagent",
+        "hooks"
+      ],
+      "category": "Developer Tools"
+    }
+  ]
+}
