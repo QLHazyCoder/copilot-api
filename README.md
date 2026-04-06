@@ -177,7 +177,7 @@ The admin panel includes five tabs: `Accounts`, `Models`, `Usage`, `Model Mappin
 - Grouped model display by provider.
 - Visible/hidden filtering and visibility management mode.
 - Double-click inline editing for premium multipliers (used in local usage-log accounting).
-- Per-model default reasoning effort for GPT-5+ models when clients omit reasoning fields.
+- Per-model default reasoning effort configuration: dynamically displays options based on model's supported reasoning levels, auto-fills when clients omit reasoning fields.
 - Model cards display feature tags and context window metadata.
 
 ![Models visible list](docs/images/模型可见.png)

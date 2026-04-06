@@ -24,6 +24,7 @@ export const adminScript = `<script>
     let premiumMultipliers = {};
     let modelCardMetadata = {};
     let reasoningEfforts = {};
+    let modelSupportedReasoningEfforts = {};
     let hiddenModels = new Set();
     let modelVisibilityFilter = 'visible';
     let isModelManageMode = false;
@@ -852,10 +853,11 @@ export const adminScript = `<script>
           multipliers: data.multipliers && typeof data.multipliers === 'object' ? data.multipliers : {},
           modelCardMetadata: data.modelCardMetadata && typeof data.modelCardMetadata === 'object' ? data.modelCardMetadata : {},
           reasoningEfforts: data.reasoningEfforts && typeof data.reasoningEfforts === 'object' ? data.reasoningEfforts : {},
+          modelSupportedReasoningEfforts: data.modelSupportedReasoningEfforts && typeof data.modelSupportedReasoningEfforts === 'object' ? data.modelSupportedReasoningEfforts : {},
           hiddenModels: hiddenModelList
         };
       } catch (_error) {
-        return { multipliers: {}, modelCardMetadata: {}, reasoningEfforts: {}, hiddenModels: [] };
+        return { multipliers: {}, modelCardMetadata: {}, reasoningEfforts: {}, modelSupportedReasoningEfforts: {}, hiddenModels: [] };
       }
     }
 
@@ -1071,12 +1073,30 @@ export const adminScript = `<script>
       return Number.isFinite(major) && major >= 5;
     }
 
+    function modelSupportsReasoningEffort(modelId) {
+      const supported = modelSupportedReasoningEfforts[modelId];
+      return Array.isArray(supported) && supported.length > 0;
+    }
+
+    function getModelSupportedEfforts(modelId) {
+      const supported = modelSupportedReasoningEfforts[modelId];
+      if (!Array.isArray(supported) || supported.length === 0) {
+        return [];
+      }
+      return supported;
+    }
+
     function getConfiguredReasoningEffort(modelId) {
       const value = reasoningEfforts[modelId];
-      if (value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh') {
+      const supported = getModelSupportedEfforts(modelId);
+      if (supported.length > 0 && supported.includes(value)) {
         return value;
       }
-      return 'xhigh';
+      // 默认返回支持列表中的最后一个（通常是最高的）
+      if (supported.length > 0) {
+        return supported[supported.length - 1];
+      }
+      return 'high';
     }
 
     function getProviderLabel(providerKey) {
@@ -1208,15 +1228,18 @@ export const adminScript = `<script>
       const safeFeaturesText = escapeHtml(featuresText);
       const visibilityActionText = isHiddenModel ? t('models.show') : t('models.hide');
       const visibilityActionClass = isHiddenModel ? 'model-visibility-action-btn show' : 'model-visibility-action-btn';
-      const showReasoningSelector = isGptFiveOrAboveModel(model.id);
+      const showReasoningSelector = modelSupportsReasoningEffort(model.id);
       const reasoningEffort = getConfiguredReasoningEffort(model.id);
+      const supportedEfforts = getModelSupportedEfforts(model.id);
       const reasoningSelectorMarkup = showReasoningSelector
         ? '<label class="model-reasoning-wrap">'
           + '<select class="model-reasoning-select" data-model-id="' + encodedModelId + '">'
-          + '<option value="low"' + (reasoningEffort === 'low' ? ' selected' : '') + '>' + escapeHtml(t('models.reasoningOption.low')) + '</option>'
-          + '<option value="medium"' + (reasoningEffort === 'medium' ? ' selected' : '') + '>' + escapeHtml(t('models.reasoningOption.medium')) + '</option>'
-          + '<option value="high"' + (reasoningEffort === 'high' ? ' selected' : '') + '>' + escapeHtml(t('models.reasoningOption.high')) + '</option>'
-          + '<option value="xhigh"' + (reasoningEffort === 'xhigh' ? ' selected' : '') + '>' + escapeHtml(t('models.reasoningOption.xhigh')) + '</option>'
+          + (supportedEfforts.includes('none') ? '<option value="none"' + (reasoningEffort === 'none' ? ' selected' : '') + '>' + escapeHtml(t('models.reasoningOption.none')) + '</option>' : '')
+          + (supportedEfforts.includes('minimal') ? '<option value="minimal"' + (reasoningEffort === 'minimal' ? ' selected' : '') + '>' + escapeHtml(t('models.reasoningOption.minimal')) + '</option>' : '')
+          + (supportedEfforts.includes('low') ? '<option value="low"' + (reasoningEffort === 'low' ? ' selected' : '') + '>' + escapeHtml(t('models.reasoningOption.low')) + '</option>' : '')
+          + (supportedEfforts.includes('medium') ? '<option value="medium"' + (reasoningEffort === 'medium' ? ' selected' : '') + '>' + escapeHtml(t('models.reasoningOption.medium')) + '</option>' : '')
+          + (supportedEfforts.includes('high') ? '<option value="high"' + (reasoningEffort === 'high' ? ' selected' : '') + '>' + escapeHtml(t('models.reasoningOption.high')) + '</option>' : '')
+          + (supportedEfforts.includes('xhigh') ? '<option value="xhigh"' + (reasoningEffort === 'xhigh' ? ' selected' : '') + '>' + escapeHtml(t('models.reasoningOption.xhigh')) + '</option>' : '')
           + '</select>'
           + '</label>'
         : '';
@@ -1407,6 +1430,7 @@ export const adminScript = `<script>
         premiumMultipliers = premiumConfig.multipliers;
         modelCardMetadata = premiumConfig.modelCardMetadata;
         reasoningEfforts = premiumConfig.reasoningEfforts;
+        modelSupportedReasoningEfforts = premiumConfig.modelSupportedReasoningEfforts;
         hiddenModels = new Set(premiumConfig.hiddenModels);
         latestModelsPayload = data;
         renderModels(latestModelsPayload);

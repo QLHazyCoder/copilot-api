@@ -25,8 +25,6 @@ export type ReasoningEffort =
   | "high"
   | "xhigh"
 
-export type GptReasoningEffort = "low" | "medium" | "high" | "xhigh"
-
 export interface AppConfig {
   extraPrompts?: Record<string, string>
   smallModel?: string
@@ -90,27 +88,21 @@ const defaultConfig: AppConfig = {
 
 let cachedConfig: AppConfig | null = null
 
-const GPT_REASONING_EFFORTS = new Set<GptReasoningEffort>([
+const VALID_REASONING_EFFORTS = new Set<ReasoningEffort>([
+  "none",
+  "minimal",
   "low",
   "medium",
   "high",
   "xhigh",
 ])
 
-export function isGptFiveOrAboveModel(model: string): boolean {
-  const match = /^gpt-(\d+)/i.exec(model)
-  if (!match) {
-    return false
-  }
-
-  const major = Number.parseInt(match[1], 10)
-  return Number.isFinite(major) && major >= 5
-}
-
-function isGptReasoningEffort(value: unknown): value is GptReasoningEffort {
+export function isValidReasoningEffort(
+  value: unknown,
+): value is ReasoningEffort {
   return (
     typeof value === "string"
-    && GPT_REASONING_EFFORTS.has(value as GptReasoningEffort)
+    && VALID_REASONING_EFFORTS.has(value as ReasoningEffort)
   )
 }
 
@@ -264,21 +256,11 @@ export function getReasoningEffortForModel(model: string): ReasoningEffort {
   const config = getConfig()
   const configuredEffort = config.modelReasoningEfforts?.[model]
 
-  if (configuredEffort) {
+  if (configuredEffort && isValidReasoningEffort(configuredEffort)) {
     return configuredEffort
   }
 
   return "high"
-}
-
-export function getGptReasoningEffortForModel(
-  model: string,
-): GptReasoningEffort {
-  const configuredEffort = getReasoningEffortForModel(model)
-  if (isGptReasoningEffort(configuredEffort)) {
-    return configuredEffort
-  }
-  return "xhigh"
 }
 
 export function getMappedModel(model: string): string {

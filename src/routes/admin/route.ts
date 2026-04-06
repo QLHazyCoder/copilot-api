@@ -12,11 +12,11 @@ import {
 } from "~/lib/accounts"
 import {
   getConfig,
-  getGptReasoningEffortForModel,
-  isGptFiveOrAboveModel,
+  getReasoningEffortForModel,
+  isValidReasoningEffort,
   saveConfig,
-  type GptReasoningEffort,
   type ModelCardMetadata,
+  type ReasoningEffort,
 } from "~/lib/config"
 import { copilotTokenManager } from "~/lib/copilot-token-manager"
 import { state } from "~/lib/state"
@@ -63,7 +63,8 @@ interface PremiumModelConfigSnapshot {
   multipliers: Record<string, number>
   modelCardMetadata: Record<string, ModelCardMetadata>
   hiddenModels: Array<string>
-  reasoningEfforts: Record<string, GptReasoningEffort>
+  reasoningEfforts: Record<string, ReasoningEffort>
+  modelSupportedReasoningEfforts: Record<string, Array<string>>
 }
 
 interface ModelVisibilityRequestBody {
@@ -71,7 +72,7 @@ interface ModelVisibilityRequestBody {
 }
 
 interface ModelReasoningEffortRequestBody {
-  effort?: GptReasoningEffort
+  effort?: ReasoningEffort
 }
 
 interface AccountUsageSuccess {
@@ -392,20 +393,10 @@ function isValidPositiveInteger(value: number | undefined): boolean {
   )
 }
 
-const GPT_REASONING_OPTIONS = new Set<GptReasoningEffort>([
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-])
-
-function isValidGptReasoningEffort(
-  value: unknown,
-): value is GptReasoningEffort {
-  return (
-    typeof value === "string"
-    && GPT_REASONING_OPTIONS.has(value as GptReasoningEffort)
-  )
+function getModelSupportedReasoningEfforts(model: {
+  capabilities?: { supports?: { reasoning_effort?: Array<string> } }
+}): Array<string> {
+  return model.capabilities?.supports?.reasoning_effort ?? []
 }
 
 async function getPremiumModelConfigSnapshot(): Promise<PremiumModelConfigSnapshot> {
@@ -421,7 +412,8 @@ async function getPremiumModelConfigSnapshot(): Promise<PremiumModelConfigSnapsh
   const modelReasoningEfforts =
     config.modelReasoningEfforts ? { ...config.modelReasoningEfforts } : {}
   const normalizedHiddenModels = normalizeStringList(rawHiddenModels)
-  const reasoningEfforts: Record<string, GptReasoningEffort> = {}
+  const reasoningEfforts: Record<string, ReasoningEffort> = {}
+  const modelSupportedReasoningEfforts: Record<string, Array<string>> = {}
   let hiddenModels = normalizedHiddenModels
   let changed = false
 
@@ -445,8 +437,13 @@ async function getPremiumModelConfigSnapshot(): Promise<PremiumModelConfigSnapsh
         changed = true
       }
 
-      if (isGptFiveOrAboveModel(model.id)) {
-        const effort = getGptReasoningEffortForModel(model.id)
+      // 获取模型支持的推理等级列表
+      const supportedEfforts = getModelSupportedReasoningEfforts(model)
+      if (supportedEfforts.length > 0) {
+        modelSupportedReasoningEfforts[model.id] = supportedEfforts
+
+        // 获取配置的推理等级，如果没有则使用默认值
+        const effort = getReasoningEffortForModel(model.id)
         reasoningEfforts[model.id] = effort
 
         if (modelReasoningEfforts[model.id] !== effort) {
@@ -485,6 +482,7 @@ async function getPremiumModelConfigSnapshot(): Promise<PremiumModelConfigSnapsh
     modelCardMetadata,
     hiddenModels,
     reasoningEfforts,
+    modelSupportedReasoningEfforts,
   }
 }
 
@@ -1019,11 +1017,15 @@ adminRoutes.put("/api/reasoning-efforts/:model", async (c) => {
     )
   }
 
-  if (!isGptFiveOrAboveModel(modelId)) {
+  // 获取模型支持的推理等级列表
+  const model = state.models?.data.find((m) => m.id === modelId)
+  const supportedEfforts = model ? getModelSupportedReasoningEfforts(model) : []
+
+  if (supportedEfforts.length === 0) {
     return c.json(
       {
         error: {
-          message: `Reasoning effort is only configurable for GPT-5+ models: ${modelId}`,
+          message: `Model ${modelId} does not support reasoning effort configuration`,
           type: "validation_error",
         },
       },
@@ -1031,11 +1033,24 @@ adminRoutes.put("/api/reasoning-efforts/:model", async (c) => {
     )
   }
 
-  if (!isValidGptReasoningEffort(body.effort)) {
+  if (!body.effort || !isValidReasoningEffort(body.effort)) {
     return c.json(
       {
         error: {
-          message: '"effort" must be one of: "low", "medium", "high", "xhigh"',
+          message: `"effort" must be a valid reasoning effort value`,
+          type: "validation_error",
+        },
+      },
+      400,
+    )
+  }
+
+  // 检查模型是否支持该推理等级
+  if (!supportedEfforts.includes(body.effort)) {
+    return c.json(
+      {
+        error: {
+          message: `Model ${modelId} does not support reasoning effort "${body.effort}". Supported values: ${supportedEfforts.join(", ")}`,
           type: "validation_error",
         },
       },

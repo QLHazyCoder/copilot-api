@@ -30,6 +30,7 @@ interface ModelSupports {
   streaming?: boolean
   structured_outputs?: boolean
   vision?: boolean
+  reasoning_effort?: Array<string>
 }
 
 interface ModelCapabilities {

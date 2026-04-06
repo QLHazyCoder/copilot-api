@@ -4,9 +4,8 @@ import { streamSSE } from "hono/streaming"
 
 import {
   getConfig,
-  getGptReasoningEffortForModel,
   getMappedModel,
-  isGptFiveOrAboveModel,
+  getReasoningEffortForModel,
 } from "~/lib/config"
 import { createHandlerLogger } from "~/lib/logger"
 import { checkRateLimit } from "~/lib/rate-limit"
@@ -51,10 +50,11 @@ export const handleResponses = async (c: Context) => {
 
   payload.model = getMappedModel(payload.model)
 
-  if (isGptFiveOrAboveModel(payload.model) && !hasReasoningEffort(payload)) {
+  // 如果请求未指定 reasoning effort，从配置中获取默认值
+  if (!hasReasoningEffort(payload)) {
     payload.reasoning = {
       ...payload.reasoning,
-      effort: getGptReasoningEffortForModel(payload.model),
+      effort: getReasoningEffortForModel(payload.model),
     }
   }
 

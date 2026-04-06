@@ -3,11 +3,7 @@ import type { Context } from "hono"
 import consola from "consola"
 import { streamSSE, type SSEMessage } from "hono/streaming"
 
-import {
-  getGptReasoningEffortForModel,
-  getMappedModel,
-  isGptFiveOrAboveModel,
-} from "~/lib/config"
+import { getMappedModel, getReasoningEffortForModel } from "~/lib/config"
 import { createHandlerLogger } from "~/lib/logger"
 import { checkRateLimit } from "~/lib/rate-limit"
 import { state } from "~/lib/state"
@@ -78,18 +74,17 @@ export async function handleCompletion(c: Context) {
 const applyModelMappingAndReasoning = (
   payload: ChatCompletionsPayload,
 ): ChatCompletionsPayload => {
+  const mappedModel = getMappedModel(payload.model)
   const mappedPayload = {
     ...payload,
-    model: getMappedModel(payload.model),
+    model: mappedModel,
   }
 
-  if (
-    isGptFiveOrAboveModel(mappedPayload.model)
-    && isNullish(mappedPayload.reasoning_effort)
-  ) {
-    mappedPayload.reasoning_effort = getGptReasoningEffortForModel(
-      mappedPayload.model,
-    )
+  // 如果请求未指定 reasoning_effort，从配置中获取默认值
+  // 实际发送时由 Copilot 上游决定模型是否支持此参数
+  if (isNullish(mappedPayload.reasoning_effort)) {
+    const configuredEffort = getReasoningEffortForModel(mappedModel)
+    mappedPayload.reasoning_effort = configuredEffort
   }
 
   return mappedPayload

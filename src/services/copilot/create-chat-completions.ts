@@ -148,7 +148,7 @@ export interface ChatCompletionsPayload {
     | null
   user?: string | null
   thinking_budget?: number
-  reasoning_effort?: "low" | "medium" | "high" | "xhigh" | null
+  reasoning_effort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | null
 }
 
 export interface Tool {
