@@ -54,10 +54,10 @@ flowchart TB
         direction TB
 
         subgraph Ingress["Ingress"]
-            I1[/v1/chat/completions]
-            I2[/v1/messages]
-            I3[/v1/responses]
-            I4[/v1beta/models/{model}:generateContent<br/>:streamGenerateContent]
+          I1["/v1/chat/completions"]
+          I2["/v1/messages"]
+          I3["/v1/responses"]
+          I4["/v1beta/models/{model}:generateContent<br/>:streamGenerateContent"]
         end
 
         subgraph Router["Capability-driven routing"]
@@ -65,15 +65,15 @@ flowchart TB
         end
 
         subgraph Upstream["Copilot upstream endpoints"]
-            U1[/chat/completions]
-            U2[/v1/messages]
-            U3[/responses]
+          U1["/chat/completions"]
+          U2["/v1/messages"]
+          U3["/responses"]
         end
 
         subgraph Admin["Management & state"]
-            A1[/admin]
-            A2[/usage]
-            A3[/token]
+          A1["/admin"]
+          A2["/usage"]
+          A3["/token"]
             A4[config.json + runtime state]
         end
     end
@@ -157,7 +157,7 @@ docker run -d \
 ## Account Setup
 
 1. Start the server using Docker
-2. Open **http://localhost:4141/admin** in your browser (must be accessed from localhost)
+2. Open [http://localhost:4141/admin](http://localhost:4141/admin) in your browser (must be accessed from localhost)
 3. Click "Add Account" to start the GitHub OAuth device flow
 4. Enter the code shown on GitHub's device authorization page
 5. Your account will be automatically configured once authorized

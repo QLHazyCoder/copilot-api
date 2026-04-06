@@ -54,10 +54,10 @@ flowchart TB
         direction TB
 
         subgraph Ingress["入口"]
-            I1[/v1/chat/completions]
-            I2[/v1/messages]
-            I3[/v1/responses]
-            I4[/v1beta/models/{model}:generateContent<br/>:streamGenerateContent]
+          I1["/v1/chat/completions"]
+          I2["/v1/messages"]
+          I3["/v1/responses"]
+          I4["/v1beta/models/{model}:generateContent<br/>:streamGenerateContent"]
         end
 
         subgraph Router["能力驱动路由"]
@@ -65,15 +65,15 @@ flowchart TB
         end
 
         subgraph Upstream["上游 Copilot 端点"]
-            U1[/chat/completions]
-            U2[/v1/messages]
-            U3[/responses]
+          U1["/chat/completions"]
+          U2["/v1/messages"]
+          U3["/responses"]
         end
 
         subgraph Admin["管理与状态"]
-            A1[/admin]
-            A2[/usage]
-            A3[/token]
+          A1["/admin"]
+          A2["/usage"]
+          A3["/token"]
             A4[config.json + state]
         end
     end
@@ -156,7 +156,7 @@ docker run -d \
 ## 账户设置
 
 1. 使用 Docker 启动服务器
-2. 在浏览器中打开 **http://localhost:4141/admin**（必须从 localhost 访问）
+2. 在浏览器中打开 [http://localhost:4141/admin](http://localhost:4141/admin)（必须从 localhost 访问）
 3. 点击"添加账户"开始 GitHub OAuth 设备流程
 4. 在 GitHub 设备授权页面输入显示的代码
 5. 授权完成后，您的账户将自动配置
