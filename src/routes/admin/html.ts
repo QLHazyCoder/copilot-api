@@ -400,7 +400,6 @@ export const adminHtml = `<!DOCTYPE html>
     .model-reasoning-wrap {
       display: inline-flex;
       align-items: center;
-      margin-left: auto;
     }
     .model-reasoning-select {
       width: 58px;
@@ -419,7 +418,7 @@ export const adminHtml = `<!DOCTYPE html>
       opacity: 0.6;
       cursor: not-allowed;
     }
-    .model-right { display: inline-flex; align-items: center; gap: 0.4rem; }
+    .model-right { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
     .model-visibility-action-btn {
       padding: 0.14rem 0.44rem;
       border: 1px solid rgba(239, 100, 100, 0.62);
@@ -450,9 +449,23 @@ export const adminHtml = `<!DOCTYPE html>
     .model-multiplier.editing { cursor: text; }
     .model-multiplier-input { width: 78px; padding: 0.2rem 0.35rem; border: 1px solid var(--border-strong); border-radius: 6px; background: rgba(20, 33, 46, 0.95); color: var(--text-primary); font-size: 0.875rem; font-weight: 600; }
     .model-meta { margin-top: 0.55rem; display: grid; gap: 0.25rem; font-size: 0.75rem; color: var(--text-secondary); }
-    .model-meta-row { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+    .model-meta-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      align-items: center;
+      gap: 0.75rem;
+    }
     .model-meta-group { display: inline-flex; align-items: baseline; gap: 0.35rem; min-width: 0; }
-    .model-meta-group-right { margin-left: auto; }
+    .model-meta-group-left { justify-self: start; }
+    .model-meta-group-center {
+      justify-self: center;
+      align-items: center;
+      gap: 0.45rem;
+    }
+    .model-meta-group-right {
+      justify-self: end;
+      margin-left: 0;
+    }
     .model-meta-label { color: #7fa3c7; white-space: nowrap; }
     .model-meta-value { color: var(--text-secondary); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .usage-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }

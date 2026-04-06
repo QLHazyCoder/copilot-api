@@ -1231,6 +1231,9 @@ export const adminScript = `<script>
       const showReasoningSelector = modelSupportsReasoningEffort(model.id);
       const reasoningEffort = getConfiguredReasoningEffort(model.id);
       const supportedEfforts = getModelSupportedEfforts(model.id);
+      const visibilityActionMarkup = isModelManageMode
+        ? '<button type="button" class="' + visibilityActionClass + '" data-model-id="' + encodedModelId + '" data-current-hidden="' + (isHiddenModel ? '1' : '0') + '">' + escapeHtml(visibilityActionText) + '</button>'
+        : '';
       const reasoningSelectorMarkup = showReasoningSelector
         ? '<label class="model-reasoning-wrap">'
           + '<select class="model-reasoning-select" data-model-id="' + encodedModelId + '">'
@@ -1247,18 +1250,20 @@ export const adminScript = `<script>
       return '<div class="model-card' + (isHiddenModel ? ' hidden-model' : '') + '">'
         + '<div class="model-top">'
         + '<div class="model-name" title="' + safeModelId + '">' + safeModelId + '</div>'
-        + reasoningSelectorMarkup
-        + '<div class="model-right">'
-        + (isModelManageMode ? '<button type="button" class="' + visibilityActionClass + '" data-model-id="' + encodedModelId + '" data-current-hidden="' + (isHiddenModel ? '1' : '0') + '">' + escapeHtml(visibilityActionText) + '</button>' : '')
-        + (isPremium ? '<span class="model-premium-badge">' + t('models.premium') + '</span>' : '')
-        + '<span class="model-multiplier ' + multiplierClass + '" data-model-id="' + encodedModelId + '">' + formatMultiplierLabel(multiplier) + '</span>'
-        + '</div>'
+        + visibilityActionMarkup
         + '</div>'
         + '<div class="model-meta">'
         + '<div class="model-meta-row">'
         + '<span class="model-meta-group model-meta-group-left">'
         + '<span class="model-meta-label">' + t('models.features') + '</span>'
         + '<span class="model-meta-value">' + safeFeaturesText + '</span>'
+        + '</span>'
+        + '<span class="model-meta-group model-meta-group-center">'
+        + reasoningSelectorMarkup
+        + '<span class="model-right">'
+        + (isPremium ? '<span class="model-premium-badge">' + t('models.premium') + '</span>' : '')
+        + '<span class="model-multiplier ' + multiplierClass + '" data-model-id="' + encodedModelId + '">' + formatMultiplierLabel(multiplier) + '</span>'
+        + '</span>'
         + '</span>'
         + '<span class="model-meta-group model-meta-group-right">'
         + '<span class="model-meta-label">' + t('models.contextWindow') + '</span>'
