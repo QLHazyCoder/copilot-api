@@ -1246,11 +1246,16 @@ export const adminScript = `<script>
           + '</select>'
           + '</label>'
         : '';
+      const reasoningRightMarkup = reasoningSelectorMarkup;
 
       return '<div class="model-card' + (isHiddenModel ? ' hidden-model' : '') + '">'
         + '<div class="model-top">'
         + '<div class="model-name" title="' + safeModelId + '">' + safeModelId + '</div>'
+        + '<div class="model-right">'
         + visibilityActionMarkup
+        + (isPremium ? '<span class="model-premium-badge">' + t('models.premium') + '</span>' : '')
+        + '<span class="model-multiplier ' + multiplierClass + '" data-model-id="' + encodedModelId + '">' + formatMultiplierLabel(multiplier) + '</span>'
+        + '</div>'
         + '</div>'
         + '<div class="model-meta">'
         + '<div class="model-meta-row">'
@@ -1258,14 +1263,8 @@ export const adminScript = `<script>
         + '<span class="model-meta-label">' + t('models.features') + '</span>'
         + '<span class="model-meta-value">' + safeFeaturesText + '</span>'
         + '</span>'
-        + '<span class="model-meta-group model-meta-group-center">'
-        + reasoningSelectorMarkup
-        + '<span class="model-right">'
-        + (isPremium ? '<span class="model-premium-badge">' + t('models.premium') + '</span>' : '')
-        + '<span class="model-multiplier ' + multiplierClass + '" data-model-id="' + encodedModelId + '">' + formatMultiplierLabel(multiplier) + '</span>'
-        + '</span>'
-        + '</span>'
         + '<span class="model-meta-group model-meta-group-right">'
+        + reasoningRightMarkup
         + '<span class="model-meta-label">' + t('models.contextWindow') + '</span>'
         + '<span class="model-meta-value">' + safeContextWindowText + '</span>'
         + '</span>'

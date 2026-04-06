@@ -451,7 +451,7 @@ export const adminHtml = `<!DOCTYPE html>
     .model-meta { margin-top: 0.55rem; display: grid; gap: 0.25rem; font-size: 0.75rem; color: var(--text-secondary); }
     .model-meta-row {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
       gap: 0.75rem;
     }
