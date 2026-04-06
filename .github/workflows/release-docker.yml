@@ -73,6 +73,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           images: ${{ env.REGISTRY }}/${{ github.repository }}
           tags: |
+            type=raw,value=latest
             type=semver,pattern=v{{version}}
             type=semver,pattern=v{{major}}.{{minor}}
             type=semver,pattern=v{{major}}
