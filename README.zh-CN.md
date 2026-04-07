@@ -203,6 +203,7 @@ docker run -d \
 
 ### Settings（设置）
 - 可编辑全局限流与相关配置项（环境变量仍保持更高优先级）。
+- 可在页面中配置 `anthropicApiKey`，用于 Claude `/v1/messages/count_tokens` 的官方准确计数。
 - 包含 Usage 测试间隔等管理配置。
 
 ![编辑设置](docs/images/编辑设置.png)
@@ -351,7 +352,8 @@ volumes:
   "smallModel": "gpt-5-mini",
   "modelReasoningEfforts": {
     "gpt-5-mini": "xhigh"
-  }
+  },
+  "anthropicApiKey": "sk-ant-..."
 }
 ```
 
@@ -369,6 +371,7 @@ volumes:
 | `modelCardMetadata` | 模型卡片扩展元数据（如 context window / features） |
 | `hiddenModels` | 在管理页中隐藏的模型列表 |
 | `useFunctionApplyPatch` | 是否把 `apply_patch` 规范化为 `function` 工具（默认启用） |
+| `anthropicApiKey` | 可选 Anthropic API key，用于 Claude `/v1/messages/count_tokens` 的官方准确计数 |
 | `rateLimitSeconds` | 当未设置 `RATE_LIMIT` 环境变量时，保存的全局最小请求间隔 |
 | `rateLimitWait` | 当未设置 `RATE_LIMIT_WAIT` 环境变量时，命中限流后的保存等待策略 |
 | `usageTestIntervalMinutes` | `/usage` 页面测试/轮询间隔分钟数（可为 `null`） |
@@ -411,6 +414,7 @@ bun run knip
 - **速率限制**：使用 `RATE_LIMIT` 防止触发 GitHub 的速率限制。设置 `RATE_LIMIT_WAIT=true` 可以队列请求而不是返回错误。
 - **商业/企业账户**：账户类型在 OAuth 流程中自动检测。
 - **多账户**：通过 `/admin` 添加多个账户，并根据需要在它们之间切换。
+- **Claude token 计数**：当配置了 `anthropicApiKey`（或环境变量 `ANTHROPIC_API_KEY`）时，`/v1/messages/count_tokens` 会优先调用 Anthropic 官方计数接口；若失败会自动回退本地估算。
 
 ## Premium Interaction 说明
 

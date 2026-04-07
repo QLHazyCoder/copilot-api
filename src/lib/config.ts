@@ -34,6 +34,7 @@ export interface AppConfig {
   modelCardMetadata?: Record<string, ModelCardMetadata>
   hiddenModels?: Array<string>
   useFunctionApplyPatch?: boolean
+  anthropicApiKey?: string
   rateLimitSeconds?: number
   rateLimitWait?: boolean
   usageTestIntervalMinutes?: number | null
@@ -266,4 +267,15 @@ export function getReasoningEffortForModel(model: string): ReasoningEffort {
 export function getMappedModel(model: string): string {
   const config = getConfig()
   return config.modelMapping?.[model] ?? model
+}
+
+export function getAnthropicApiKey(): string | undefined {
+  const config = getConfig()
+  const configApiKey = config.anthropicApiKey?.trim()
+  if (configApiKey) {
+    return configApiKey
+  }
+
+  const envApiKey = process.env.ANTHROPIC_API_KEY?.trim()
+  return envApiKey || undefined
 }

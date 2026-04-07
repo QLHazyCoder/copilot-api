@@ -1138,6 +1138,7 @@ adminRoutes.get("/api/settings", (c) => {
     rateLimitSeconds: config.rateLimitSeconds ?? null,
     rateLimitWait: config.rateLimitWait ?? false,
     usageTestIntervalMinutes,
+    hasAnthropicApiKey: Boolean(config.anthropicApiKey?.trim()),
     envOverride: {
       rateLimitSeconds: process.env.RATE_LIMIT !== undefined,
       rateLimitWait: process.env.RATE_LIMIT_WAIT !== undefined,
@@ -1150,6 +1151,8 @@ adminRoutes.put("/api/settings", async (c) => {
     rateLimitSeconds?: number | null
     rateLimitWait?: boolean
     usageTestIntervalMinutes?: number | null
+    anthropicApiKey?: string | null
+    clearAnthropicApiKey?: boolean
   }>()
 
   const config = getConfig()
@@ -1198,11 +1201,25 @@ adminRoutes.put("/api/settings", async (c) => {
     )
   }
 
+  const clearAnthropicApiKey = body.clearAnthropicApiKey === true
+  const currentAnthropicApiKey = config.anthropicApiKey?.trim() || undefined
+
+  let anthropicApiKey = currentAnthropicApiKey
+  if (clearAnthropicApiKey) {
+    anthropicApiKey = undefined
+  } else if (body.anthropicApiKey !== undefined && body.anthropicApiKey !== null) {
+    const nextAnthropicApiKey = body.anthropicApiKey.trim()
+    if (nextAnthropicApiKey) {
+      anthropicApiKey = nextAnthropicApiKey
+    }
+  }
+
   await saveConfig({
     ...config,
     rateLimitSeconds,
     rateLimitWait,
     usageTestIntervalMinutes,
+    anthropicApiKey,
   })
 
   state.rateLimitSeconds =
@@ -1220,6 +1237,7 @@ adminRoutes.put("/api/settings", async (c) => {
       rateLimitSeconds: rateLimitSeconds ?? null,
       rateLimitWait,
       usageTestIntervalMinutes: usageTestIntervalMinutes ?? null,
+      hasAnthropicApiKey: Boolean(anthropicApiKey),
     },
   })
 })

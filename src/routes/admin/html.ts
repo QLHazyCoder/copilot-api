@@ -1212,6 +1212,25 @@ export const adminHtml = `<!DOCTYPE html>
               <span class="settings-switch-slider"></span>
             </span>
           </label>
+          <div class="settings-section">
+            <div class="settings-section-title" data-i18n="settings.anthropicApiKey">Anthropic API Key</div>
+            <div class="settings-input-row">
+              <input class="input" id="anthropicApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep current key" data-i18n-placeholder="settings.anthropicApiKeyPlaceholder">
+            </div>
+            <p class="hint" data-i18n="settings.anthropicApiKeyHint">Used for official Claude /v1/messages/count_tokens. Enter a new key to replace existing one; leave empty to keep current value.</p>
+            <label class="settings-switch-row" for="clearAnthropicApiKey">
+              <span class="settings-switch-copy">
+                <span class="settings-switch-title" data-i18n="settings.clearAnthropicApiKey">Clear saved Anthropic API key</span>
+                <span class="settings-switch-hint" data-i18n="settings.clearAnthropicApiKeyHint">Enable and save to remove the stored key.</span>
+              </span>
+              <span class="settings-switch">
+                <input id="clearAnthropicApiKey" type="checkbox">
+                <span class="settings-switch-slider"></span>
+              </span>
+            </label>
+            <p class="hint" id="anthropicApiKeyStatus" data-i18n="settings.anthropicApiKeyStatusNotSet">Anthropic API key status: not set.</p>
+            <p class="hint" data-i18n="settings.anthropicApiKeyNote">This key must be a valid Anthropic API key. If unavailable or invalid, count_tokens falls back to local estimation.</p>
+          </div>
           <div class="notice settings-notice" id="settingsNotice" data-i18n="settings.loadingSettings">
             Loading settings...
           </div>

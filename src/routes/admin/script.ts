@@ -402,17 +402,35 @@ export const adminScript = `<script>
       const rawRateLimitSeconds = document.getElementById('rateLimitSeconds').value.trim();
       const rateLimitSeconds = rawRateLimitSeconds === '' ? null : Number(rawRateLimitSeconds);
       const rateLimitWait = document.getElementById('rateLimitWait').checked;
+      const anthropicApiKey = document.getElementById('anthropicApiKey').value.trim();
+      const clearAnthropicApiKey = document.getElementById('clearAnthropicApiKey').checked;
       return {
         rawRateLimitSeconds,
         rateLimitSeconds,
-        rateLimitWait
+        rateLimitWait,
+        anthropicApiKey,
+        clearAnthropicApiKey
       };
     }
 
     function isSameSettingsState(left, right) {
       if (!left || !right) return false;
       return left.rateLimitSeconds === right.rateLimitSeconds
-        && left.rateLimitWait === right.rateLimitWait;
+        && left.rateLimitWait === right.rateLimitWait
+        && left.anthropicApiKey === right.anthropicApiKey
+        && left.clearAnthropicApiKey === right.clearAnthropicApiKey;
+    }
+
+    function syncAnthropicApiKeyControls() {
+      const keyInput = document.getElementById('anthropicApiKey');
+      const clearToggle = document.getElementById('clearAnthropicApiKey');
+      if (!keyInput || !clearToggle) return;
+
+      const shouldClear = Boolean(clearToggle.checked);
+      keyInput.disabled = shouldClear;
+      if (shouldClear) {
+        keyInput.value = '';
+      }
     }
 
     function updateSettingsDirtyState() {
@@ -438,13 +456,22 @@ export const adminScript = `<script>
         const data = await res.json();
         document.getElementById('rateLimitSeconds').value = data.rateLimitSeconds ?? '';
         document.getElementById('rateLimitWait').checked = Boolean(data.rateLimitWait);
+        document.getElementById('anthropicApiKey').value = '';
+        document.getElementById('clearAnthropicApiKey').checked = false;
+        const hasAnthropicApiKey = Boolean(data.hasAnthropicApiKey);
+        document.getElementById('anthropicApiKeyStatus').textContent = hasAnthropicApiKey
+          ? t('settings.anthropicApiKeyStatusSet')
+          : t('settings.anthropicApiKeyStatusNotSet');
+        syncAnthropicApiKeyControls();
 
         settingsLoadedState = {
           rateLimitSeconds:
             data.rateLimitSeconds === null || data.rateLimitSeconds === undefined ?
               null
             : Number(data.rateLimitSeconds),
-          rateLimitWait: Boolean(data.rateLimitWait)
+          rateLimitWait: Boolean(data.rateLimitWait),
+          anthropicApiKey: '',
+          clearAnthropicApiKey: false
         };
 
         const notices = [t('settings.noticeProcessWide')];
@@ -479,13 +506,19 @@ export const adminScript = `<script>
 
       btn.disabled = true;
       try {
+        const requestBody = {
+          rateLimitSeconds: currentState.rateLimitSeconds,
+          rateLimitWait: currentState.rateLimitWait,
+          clearAnthropicApiKey: currentState.clearAnthropicApiKey
+        };
+        if (currentState.anthropicApiKey !== '') {
+          requestBody.anthropicApiKey = currentState.anthropicApiKey;
+        }
+
         const res = await fetch(API_BASE + '/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            rateLimitSeconds: currentState.rateLimitSeconds,
-            rateLimitWait: currentState.rateLimitWait
-          })
+          body: JSON.stringify(requestBody)
         });
         const data = await res.json();
         if (!res.ok) {
@@ -2382,6 +2415,11 @@ export const adminScript = `<script>
     document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
     document.getElementById('rateLimitSeconds').addEventListener('input', updateSettingsDirtyState);
     document.getElementById('rateLimitWait').addEventListener('change', updateSettingsDirtyState);
+    document.getElementById('anthropicApiKey').addEventListener('input', updateSettingsDirtyState);
+    document.getElementById('clearAnthropicApiKey').addEventListener('change', function () {
+      syncAnthropicApiKeyControls();
+      updateSettingsDirtyState();
+    });
 
     document.getElementById('addMappingBtn').addEventListener('click', function () {
       document.getElementById('mappingFormArea').classList.add('active');

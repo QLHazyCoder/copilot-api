@@ -203,6 +203,7 @@ The admin panel includes five tabs: `Accounts`, `Models`, `Usage`, `Model Mappin
 
 ### Settings
 - Edit global rate-limit and related admin settings (env vars still take precedence).
+- Configure `anthropicApiKey` in the page for official Claude `/v1/messages/count_tokens` accuracy.
 - Includes Usage test interval configuration.
 
 ![Settings page](docs/images/编辑设置.png)
@@ -351,7 +352,8 @@ The configuration file is stored at `/data/copilot-api/config.json` inside the c
   "smallModel": "gpt-5-mini",
   "modelReasoningEfforts": {
     "gpt-5-mini": "xhigh"
-  }
+  },
+  "anthropicApiKey": "sk-ant-..."
 }
 ```
 
@@ -369,6 +371,7 @@ The configuration file is stored at `/data/copilot-api/config.json` inside the c
 | `modelCardMetadata` | Extended model-card metadata (e.g. context window / features) |
 | `hiddenModels` | Models hidden in the Admin UI |
 | `useFunctionApplyPatch` | Whether `apply_patch` is normalized to a `function` tool (enabled by default) |
+| `anthropicApiKey` | Optional Anthropic API key used for accurate Claude `/v1/messages/count_tokens` forwarding |
 | `rateLimitSeconds` | Saved global minimum interval between requests when `RATE_LIMIT` env is not set |
 | `rateLimitWait` | Saved wait behavior when rate limit is hit and `RATE_LIMIT_WAIT` env is not set |
 | `usageTestIntervalMinutes` | Usage test/poll interval in minutes (can be `null`) |
@@ -411,6 +414,7 @@ bun run knip
 - **Rate Limiting**: Use `RATE_LIMIT` to prevent hitting GitHub's rate limits. Set `RATE_LIMIT_WAIT=true` to queue requests instead of returning errors.
 - **Business/Enterprise Accounts**: The account type is automatically detected during OAuth flow.
 - **Multiple Accounts**: Add multiple accounts via `/admin` and switch between them as needed.
+- **Claude token counting**: `/v1/messages/count_tokens` tries Anthropic's official count endpoint first for Claude models when `anthropicApiKey` (or `ANTHROPIC_API_KEY`) is available, and falls back to local estimation on failure.
 
 ## Premium Interaction Notes
 
