@@ -95,7 +95,8 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
     "settings.unsaved": "Unsaved changes",
     "settings.rateLimitSeconds": "Rate Limit Seconds",
     "settings.secondsUnit": "sec",
-    "settings.rateLimitPlaceholder": "Leave empty to disable",
+    "settings.rateLimitPlaceholder":
+      "Minimum global interval between requests. Empty means disabled.",
     "settings.rateLimitHint":
       "Minimum global interval between requests. Empty means disabled.",
     "settings.rateLimitWait":
@@ -113,8 +114,7 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
     "settings.anthropicApiKeyStatusSet": "Set",
     "settings.anthropicApiKeyStatusNotSet": "Not set",
     "settings.loadingSettings": "Loading settings...",
-    "settings.noticeProcessWide":
-      "This rate limit is process-wide, not per account or per client.",
+    "settings.noticeProcessWide": "This rate limit is process-wide.",
     "settings.noticeEnvOverride":
       "Environment variables currently override: {names}.",
     "settings.noticeSavedValues":
@@ -319,7 +319,7 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
     "settings.unsaved": "有未保存更改",
     "settings.rateLimitSeconds": "限流秒数",
     "settings.secondsUnit": "秒",
-    "settings.rateLimitPlaceholder": "留空表示关闭限流",
+    "settings.rateLimitPlaceholder": "请求之间的全局最小间隔。留空表示不限制。",
     "settings.rateLimitHint": "请求之间的全局最小间隔。留空表示不限制。",
     "settings.rateLimitWait": "触发限流时等待，而不是直接返回 HTTP 429",
     "settings.rateLimitWaitHint": "开启后，请求将排队等待，而不是立即失败。",
@@ -334,8 +334,7 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
     "settings.anthropicApiKeyStatusSet": "已设置",
     "settings.anthropicApiKeyStatusNotSet": "未设置",
     "settings.loadingSettings": "正在加载设置...",
-    "settings.noticeProcessWide":
-      "该限流作用于整个进程，而不是单个账号或单个客户端。",
+    "settings.noticeProcessWide": "该限流作用于整个进程。",
     "settings.noticeEnvOverride": "当前被环境变量覆盖：{names}。",
     "settings.noticeSavedValues": "保存后立即生效，并持久化到 config.json。",
     "settings.failedLoad": "加载设置失败。",

@@ -715,6 +715,10 @@ export const adminHtml = `<!DOCTYPE html>
       background: rgba(12, 21, 31, 0.58);
       padding: 0.78rem;
     }
+    .settings-rate-limit-section {
+      display: grid;
+      gap: 0.5rem;
+    }
     .settings-section-title {
       font-size: 0.82rem;
       color: var(--text-primary);
@@ -794,6 +798,13 @@ export const adminHtml = `<!DOCTYPE html>
       background: rgba(12, 21, 31, 0.58);
       cursor: pointer;
     }
+    .settings-switch-row-compact {
+      padding: 0.58rem 0;
+      border: 0;
+      border-top: 1px dashed rgba(63, 96, 131, 0.62);
+      border-radius: 0;
+      background: transparent;
+    }
     .settings-switch-copy {
       min-width: 0;
       display: flex;
@@ -866,6 +877,9 @@ export const adminHtml = `<!DOCTYPE html>
       background: rgba(20, 33, 46, 0.52);
       border-color: rgba(63, 96, 131, 0.62);
       font-size: 0.74rem;
+    }
+    .settings-rate-limit-section .settings-notice {
+      margin-top: 0;
     }
     .mapping-form {
       display: none;
@@ -1230,24 +1244,26 @@ export const adminHtml = `<!DOCTYPE html>
           </div>
         </div>
         <div class="form-grid">
-          <div class="settings-section">
+          <div class="settings-section settings-rate-limit-section">
             <div class="settings-section-title" data-i18n="settings.rateLimitSeconds">Rate Limit Seconds</div>
             <div class="settings-input-row">
               <input class="input" id="rateLimitSeconds" type="number" min="0" step="1" placeholder="Leave empty to disable" data-i18n-placeholder="settings.rateLimitPlaceholder">
               <span class="settings-input-unit" data-i18n="settings.secondsUnit">sec</span>
             </div>
-            <p class="hint" data-i18n="settings.rateLimitHint">Minimum global interval between requests. Empty means disabled.</p>
+            <label class="settings-switch-row settings-switch-row-compact" for="rateLimitWait">
+              <span class="settings-switch-copy">
+                <span class="settings-switch-title" data-i18n="settings.rateLimitWait">Wait instead of returning HTTP 429 when rate limit is hit</span>
+                <span class="settings-switch-hint" data-i18n="settings.rateLimitWaitHint">When enabled, requests queue instead of failing immediately.</span>
+              </span>
+              <span class="settings-switch">
+                <input id="rateLimitWait" type="checkbox">
+                <span class="settings-switch-slider"></span>
+              </span>
+            </label>
+            <div class="notice settings-notice" id="settingsNotice" data-i18n="settings.loadingSettings">
+              Loading settings...
+            </div>
           </div>
-          <label class="settings-switch-row" for="rateLimitWait">
-            <span class="settings-switch-copy">
-              <span class="settings-switch-title" data-i18n="settings.rateLimitWait">Wait instead of returning HTTP 429 when rate limit is hit</span>
-              <span class="settings-switch-hint" data-i18n="settings.rateLimitWaitHint">When enabled, requests queue instead of failing immediately.</span>
-            </span>
-            <span class="settings-switch">
-              <input id="rateLimitWait" type="checkbox">
-              <span class="settings-switch-slider"></span>
-            </span>
-          </label>
           <div class="settings-section">
             <div class="settings-title-row">
               <div class="settings-section-title" data-i18n="settings.anthropicApiKey">Anthropic API Key</div>
@@ -1258,9 +1274,6 @@ export const adminHtml = `<!DOCTYPE html>
               <button class="btn settings-inline-btn" id="clearAnthropicApiKeyBtn" type="button" data-i18n="settings.clearAnthropicApiKey">Clear saved key</button>
             </div>
             <p class="hint" data-i18n="settings.anthropicApiKeyHint">This key must be a valid Anthropic API key. It is only used for accurate token counting on Claude models.</p>
-          </div>
-          <div class="notice settings-notice" id="settingsNotice" data-i18n="settings.loadingSettings">
-            Loading settings...
           </div>
         </div>
       </div>
