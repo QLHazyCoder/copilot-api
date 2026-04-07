@@ -18,3 +18,4 @@ dist/
 # docs markdown and json
 /docs/**/*.md
 /docs/**/*.json
+/.github/**/*.md
