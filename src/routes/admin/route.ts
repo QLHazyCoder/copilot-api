@@ -447,7 +447,9 @@ function syncRateLimitState(
       rateLimitSeconds
     : state.rateLimitSeconds
   state.rateLimitWait =
-    process.env.RATE_LIMIT_WAIT === undefined ? rateLimitWait : state.rateLimitWait
+    process.env.RATE_LIMIT_WAIT === undefined ?
+      rateLimitWait
+    : state.rateLimitWait
 }
 
 function getModelSupportedReasoningEfforts(model: {
