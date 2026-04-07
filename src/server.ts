@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { logger } from "hono/logger"
 
+import { createAuthMiddleware } from "./lib/request-auth"
 import { traceIdMiddleware } from "./lib/trace"
 import { adminRoutes } from "./routes/admin/route"
 import { completionRoutes } from "./routes/chat-completions/route"
@@ -18,6 +19,13 @@ export const server = new Hono()
 server.use(traceIdMiddleware)
 server.use(logger())
 server.use(cors())
+server.use(
+  "*",
+  createAuthMiddleware({
+    allowUnauthenticatedPaths: ["/", "/admin"],
+    allowUnauthenticatedPathPrefixes: ["/admin/"],
+  }),
+)
 
 server.get("/", (c) => c.text("Server running"))
 

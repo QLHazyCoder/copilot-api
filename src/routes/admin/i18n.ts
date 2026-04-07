@@ -113,6 +113,16 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
       "This will remove the saved key immediately. Continue?",
     "settings.anthropicApiKeyStatusSet": "Set",
     "settings.anthropicApiKeyStatusNotSet": "Not set",
+    "settings.gatewayApiKey": "Gateway API Key",
+    "settings.gatewayApiKeyPlaceholder": "Leave empty to keep current key",
+    "settings.gatewayApiKeyHint":
+      "Suitable for scenarios without gpt/new-style relay projects, helping avoid unauthorized calls or abuse after public exposure.",
+    "settings.clearGatewayApiKey": "Clear saved key",
+    "settings.clearGatewayApiKeyConfirmTitle": "Clear gateway API key",
+    "settings.clearGatewayApiKeyConfirmMessage":
+      "This will remove the saved gateway API key immediately. Continue?",
+    "settings.gatewayApiKeyStatusSet": "Set",
+    "settings.gatewayApiKeyStatusNotSet": "Not set",
     "settings.loadingSettings": "Loading settings...",
     "settings.noticeProcessWide": "This rate limit is process-wide.",
     "settings.noticeEnvOverride":
@@ -333,6 +343,16 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
       "将立即删除当前已保存密钥，是否继续？",
     "settings.anthropicApiKeyStatusSet": "已设置",
     "settings.anthropicApiKeyStatusNotSet": "未设置",
+    "settings.gatewayApiKey": "网关 API Key",
+    "settings.gatewayApiKeyPlaceholder": "留空则保留当前 key",
+    "settings.gatewayApiKeyHint":
+      "适合不结合gpt/new等中转站项目使用的情况，避免接口在公网暴露后被未授权调用或滥用。",
+    "settings.clearGatewayApiKey": "清空已保存 key",
+    "settings.clearGatewayApiKeyConfirmTitle": "清空网关 API Key",
+    "settings.clearGatewayApiKeyConfirmMessage":
+      "将立即删除当前保存的网关 key，是否继续？",
+    "settings.gatewayApiKeyStatusSet": "已设置",
+    "settings.gatewayApiKeyStatusNotSet": "未设置",
     "settings.loadingSettings": "正在加载设置...",
     "settings.noticeProcessWide": "该限流作用于整个进程。",
     "settings.noticeEnvOverride": "当前被环境变量覆盖：{names}。",
@@ -425,7 +445,7 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
   </table>
 </div>
 <div class="manual-note">规则：responses 仅用于 Codex 与 gpt-5.4 相关模型；gemini 端点仅用于 Gemini 相关模型；chat/completions 与 messages 可用于所有模型。</div>`,
-    "manual.section3Html": `<div class="manual-section-title">2.推荐结合 <a href="https://github.com/tbphp/gpt-load" target="_blank" rel="noopener noreferrer">GPT-Load</a>与 <a href="https://github.com/QuantumNous/new-api" target="_blank" rel="noopener noreferrer">New API</a>使用</div>
+    "manual.section3Html": `<div class="manual-section-title">2.推荐结合 <a href="https://github.com/tbphp/gpt-load" target="_blank" rel="noopener noreferrer">GPT-Load</a>（推荐，使用简单，全面，方便）或者 <a href="https://github.com/QuantumNous/new-api" target="_blank" rel="noopener noreferrer">New API</a>使用</div>
 <ol class="manual-list">
   <li>chat 组（openai）：可放全部模型。</li>
   <li>messages 组（anthropic）：可放全部模型。</li>

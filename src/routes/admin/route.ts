@@ -19,6 +19,7 @@ import {
   type ReasoningEffort,
 } from "~/lib/config"
 import { copilotTokenManager } from "~/lib/copilot-token-manager"
+import { normalizeApiKeys } from "~/lib/request-auth"
 import { state } from "~/lib/state"
 import {
   listUsageLogEndpoints,
@@ -101,6 +102,8 @@ interface AdminSettingsRequestBody {
   usageTestIntervalMinutes?: number | null
   anthropicApiKey?: string | null
   clearAnthropicApiKey?: boolean
+  authApiKey?: string | null
+  clearAuthApiKey?: boolean
 }
 
 const DEFAULT_USAGE_LOG_LIMIT = 50
@@ -435,6 +438,33 @@ function resolveAnthropicApiKey(
   }
 
   const nextValue = body.anthropicApiKey.trim()
+  return nextValue || currentValue
+}
+
+function getCurrentAuthApiKey(
+  config: ReturnType<typeof getConfig>,
+): string | undefined {
+  const singleApiKey = config.auth?.apiKey?.trim()
+  if (singleApiKey) {
+    return singleApiKey
+  }
+
+  return normalizeApiKeys(config.auth?.apiKeys)[0]
+}
+
+function resolveAuthApiKey(
+  body: AdminSettingsRequestBody,
+  currentValue: string | undefined,
+): string | undefined {
+  if (body.clearAuthApiKey === true) {
+    return undefined
+  }
+
+  if (body.authApiKey === undefined || body.authApiKey === null) {
+    return currentValue
+  }
+
+  const nextValue = body.authApiKey.trim()
   return nextValue || currentValue
 }
 
@@ -1188,6 +1218,7 @@ adminRoutes.put("/api/model-visibility/:model", async (c) => {
 
 adminRoutes.get("/api/settings", (c) => {
   const config = getConfig()
+  const authApiKey = getCurrentAuthApiKey(config)
   const usageTestIntervalMinutes =
     config.usageTestIntervalMinutes === undefined ?
       10
@@ -1198,6 +1229,7 @@ adminRoutes.get("/api/settings", (c) => {
     rateLimitWait: config.rateLimitWait ?? false,
     usageTestIntervalMinutes,
     hasAnthropicApiKey: Boolean(config.anthropicApiKey?.trim()),
+    hasAuthApiKey: Boolean(authApiKey),
     envOverride: {
       rateLimitSeconds: process.env.RATE_LIMIT !== undefined,
       rateLimitWait: process.env.RATE_LIMIT_WAIT !== undefined,
@@ -1251,9 +1283,15 @@ adminRoutes.put("/api/settings", async (c) => {
     body,
     config.anthropicApiKey?.trim() || undefined,
   )
+  const authApiKey = resolveAuthApiKey(body, getCurrentAuthApiKey(config))
 
   await saveConfig({
     ...config,
+    auth: {
+      ...config.auth,
+      apiKey: authApiKey,
+      apiKeys: authApiKey ? [authApiKey] : [],
+    },
     rateLimitSeconds,
     rateLimitWait,
     usageTestIntervalMinutes,
@@ -1269,8 +1307,60 @@ adminRoutes.put("/api/settings", async (c) => {
       rateLimitWait,
       usageTestIntervalMinutes: usageTestIntervalMinutes ?? null,
       hasAnthropicApiKey: Boolean(anthropicApiKey),
+      hasAuthApiKey: Boolean(authApiKey),
     },
   })
+})
+
+adminRoutes.get("/api/models", async (c) => {
+  try {
+    if (!state.models) {
+      await cacheModels()
+    }
+
+    const models = state.models?.data.map((model) => ({
+      id: model.id,
+      object: "model",
+      type: "model",
+      created: 0,
+      created_at: new Date(0).toISOString(),
+      owned_by: model.vendor,
+      display_name: model.name,
+    }))
+
+    return c.json({
+      object: "list",
+      data: models,
+      has_more: false,
+    })
+  } catch (error) {
+    return c.json(
+      {
+        error: {
+          message: `Failed to load models: ${String(error)}`,
+          type: "server_error",
+        },
+      },
+      500,
+    )
+  }
+})
+
+adminRoutes.get("/api/usage-summary", async (c) => {
+  try {
+    const usage = await getCopilotUsage()
+    return c.json(usage)
+  } catch (error) {
+    return c.json(
+      {
+        error: {
+          message: `Failed to fetch usage summary: ${String(error)}`,
+          type: "server_error",
+        },
+      },
+      500,
+    )
+  }
 })
 
 adminRoutes.put("/api/model-mappings/:from", async (c) => {

@@ -1275,6 +1275,17 @@ export const adminHtml = `<!DOCTYPE html>
             </div>
             <p class="hint" data-i18n="settings.anthropicApiKeyHint">This key must be a valid Anthropic API key. It is only used for accurate token counting on Claude models.</p>
           </div>
+          <div class="settings-section">
+            <div class="settings-title-row">
+              <div class="settings-section-title" data-i18n="settings.gatewayApiKey">Gateway API Key</div>
+              <span class="settings-status-badge" id="gatewayApiKeyStatus" data-i18n="settings.gatewayApiKeyStatusNotSet">Not set</span>
+            </div>
+            <div class="settings-input-row">
+              <input class="input" id="gatewayApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep current key" data-i18n-placeholder="settings.gatewayApiKeyPlaceholder">
+              <button class="btn settings-inline-btn" id="clearGatewayApiKeyBtn" type="button" data-i18n="settings.clearGatewayApiKey">Clear saved key</button>
+            </div>
+            <p class="hint" data-i18n="settings.gatewayApiKeyHint">Suitable for scenarios without gpt/new-style relay projects, helping avoid unauthorized calls or abuse after public exposure.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -1363,7 +1374,7 @@ export const adminHtml = `<!DOCTYPE html>
           </section>
 
           <section class="manual-section" data-i18n-html="manual.section3Html">
-            <div class="manual-section-title">2.推荐结合 <a href="https://github.com/tbphp/gpt-load" target="_blank" rel="noopener noreferrer">GPT-Load</a>与 <a href="https://github.com/QuantumNous/new-api" target="_blank" rel="noopener noreferrer">New API</a>使用</div>
+            <div class="manual-section-title">2.推荐结合 <a href="https://github.com/tbphp/gpt-load" target="_blank" rel="noopener noreferrer">GPT-Load</a>（推荐，使用简单，全面，方便）或者 <a href="https://github.com/QuantumNous/new-api" target="_blank" rel="noopener noreferrer">New API</a>使用</div>
             <ol class="manual-list">
               <li>chat 组（openai）：可放全部模型。</li>
               <li>messages 组（anthropic）：可放全部模型。</li>

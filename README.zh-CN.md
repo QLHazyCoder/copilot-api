@@ -373,6 +373,7 @@ volumes:
 | `hiddenModels` | 在管理页中隐藏的模型列表 |
 | `useFunctionApplyPatch` | 是否把 `apply_patch` 规范化为 `function` 工具（默认启用） |
 | `anthropicApiKey` | 可选 Anthropic API key，用于 Claude `/v1/messages/count_tokens` 的官方准确计数 |
+| `auth.apiKey` | 可选网关 API key；配置后受保护路由需携带 `x-api-key` 或 `Authorization: Bearer <key>` |
 | `rateLimitSeconds` | 当未设置 `RATE_LIMIT` 环境变量时，保存的全局最小请求间隔 |
 | `rateLimitWait` | 当未设置 `RATE_LIMIT_WAIT` 环境变量时，命中限流后的保存等待策略 |
 | `usageTestIntervalMinutes` | `/usage` 页面测试/轮询间隔分钟数（可为 `null`） |
@@ -417,6 +418,7 @@ bun run knip
 - **多账户**：通过 `/admin` 添加多个账户，并根据需要在它们之间切换。
 - **Claude token 计数**：当配置了 `anthropicApiKey`（或环境变量 `ANTHROPIC_API_KEY`）时，`/v1/messages/count_tokens` 会优先调用 Anthropic 官方计数接口；若失败会自动回退本地估算。
 - **Trace 请求头**：客户端可主动传入 `x-trace-id`；若未传或格式非法，网关会自动生成并在响应头回写，同时把该 ID 透传到上游用于链路关联。
+- **网关 API key 鉴权**：当配置了 `auth.apiKey` 后，受保护路由需要携带 `x-api-key` 或 `Authorization: Bearer <key>`。
 
 ## Premium Interaction 说明
 

@@ -373,6 +373,7 @@ The configuration file is stored at `/data/copilot-api/config.json` inside the c
 | `hiddenModels` | Models hidden in the Admin UI |
 | `useFunctionApplyPatch` | Whether `apply_patch` is normalized to a `function` tool (enabled by default) |
 | `anthropicApiKey` | Optional Anthropic API key used for accurate Claude `/v1/messages/count_tokens` forwarding |
+| `auth.apiKey` | Optional gateway API key; when configured, requests must include `x-api-key` or `Authorization: Bearer <key>` |
 | `rateLimitSeconds` | Saved global minimum interval between requests when `RATE_LIMIT` env is not set |
 | `rateLimitWait` | Saved wait behavior when rate limit is hit and `RATE_LIMIT_WAIT` env is not set |
 | `usageTestIntervalMinutes` | Usage test/poll interval in minutes (can be `null`) |
@@ -417,6 +418,7 @@ bun run knip
 - **Multiple Accounts**: Add multiple accounts via `/admin` and switch between them as needed.
 - **Claude token counting**: `/v1/messages/count_tokens` tries Anthropic's official count endpoint first for Claude models when `anthropicApiKey` (or `ANTHROPIC_API_KEY`) is available, and falls back to local estimation on failure.
 - **Trace headers**: You can pass `x-trace-id` from the client; if absent or invalid, the gateway auto-generates one and returns it in the response header, while forwarding the same ID upstream for request correlation.
+- **Gateway API key auth**: when `auth.apiKey` is configured, protected routes require `x-api-key` or `Authorization: Bearer <key>`.
 
 ## Premium Interaction Notes
 

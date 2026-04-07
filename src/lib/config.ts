@@ -25,7 +25,13 @@ export type ReasoningEffort =
   | "high"
   | "xhigh"
 
+export interface AuthConfig {
+  apiKey?: string
+  apiKeys?: Array<string>
+}
+
 export interface AppConfig {
+  auth?: AuthConfig
   extraPrompts?: Record<string, string>
   smallModel?: string
   modelReasoningEfforts?: Record<string, ReasoningEffort>
@@ -51,6 +57,7 @@ const gpt5ExplorationPrompt = `## Exploration and reading files
 - **Workflow:** (a) plan all needed reads → (b) issue one parallel batch → (c) analyze results → (d) repeat if new, unpredictable reads arise.`
 
 const defaultConfig: AppConfig = {
+  auth: {},
   extraPrompts: {
     "gpt-5-mini": gpt5ExplorationPrompt,
     "gpt-5.1-codex-max": gpt5ExplorationPrompt,

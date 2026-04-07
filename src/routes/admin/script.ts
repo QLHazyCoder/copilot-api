@@ -403,11 +403,13 @@ export const adminScript = `<script>
       const rateLimitSeconds = rawRateLimitSeconds === '' ? null : Number(rawRateLimitSeconds);
       const rateLimitWait = document.getElementById('rateLimitWait').checked;
       const anthropicApiKey = document.getElementById('anthropicApiKey').value.trim();
+      const gatewayApiKey = document.getElementById('gatewayApiKey').value.trim();
       return {
         rawRateLimitSeconds,
         rateLimitSeconds,
         rateLimitWait,
-        anthropicApiKey
+        anthropicApiKey,
+        gatewayApiKey
       };
     }
 
@@ -415,7 +417,8 @@ export const adminScript = `<script>
       if (!left || !right) return false;
       return left.rateLimitSeconds === right.rateLimitSeconds
         && left.rateLimitWait === right.rateLimitWait
-        && left.anthropicApiKey === right.anthropicApiKey;
+        && left.anthropicApiKey === right.anthropicApiKey
+        && left.gatewayApiKey === right.gatewayApiKey;
     }
 
     function updateSettingsDirtyState() {
@@ -442,6 +445,7 @@ export const adminScript = `<script>
         document.getElementById('rateLimitSeconds').value = data.rateLimitSeconds ?? '';
         document.getElementById('rateLimitWait').checked = Boolean(data.rateLimitWait);
         document.getElementById('anthropicApiKey').value = '';
+        document.getElementById('gatewayApiKey').value = '';
         const anthropicApiKeyStatusEl = document.getElementById('anthropicApiKeyStatus');
         const hasAnthropicApiKey = Boolean(data.hasAnthropicApiKey);
         anthropicApiKeyStatusEl.textContent = hasAnthropicApiKey
@@ -450,13 +454,22 @@ export const adminScript = `<script>
         anthropicApiKeyStatusEl.classList.toggle('is-set', hasAnthropicApiKey);
         anthropicApiKeyStatusEl.classList.toggle('is-unset', !hasAnthropicApiKey);
 
+        const gatewayApiKeyStatusEl = document.getElementById('gatewayApiKeyStatus');
+        const hasAuthApiKey = Boolean(data.hasAuthApiKey);
+        gatewayApiKeyStatusEl.textContent = hasAuthApiKey
+          ? t('settings.gatewayApiKeyStatusSet')
+          : t('settings.gatewayApiKeyStatusNotSet');
+        gatewayApiKeyStatusEl.classList.toggle('is-set', hasAuthApiKey);
+        gatewayApiKeyStatusEl.classList.toggle('is-unset', !hasAuthApiKey);
+
         settingsLoadedState = {
           rateLimitSeconds:
             data.rateLimitSeconds === null || data.rateLimitSeconds === undefined ?
               null
             : Number(data.rateLimitSeconds),
           rateLimitWait: Boolean(data.rateLimitWait),
-          anthropicApiKey: ''
+          anthropicApiKey: '',
+          gatewayApiKey: ''
         };
 
         const notices = [t('settings.noticeProcessWide')];
@@ -498,6 +511,9 @@ export const adminScript = `<script>
         if (currentState.anthropicApiKey !== '') {
           requestBody.anthropicApiKey = currentState.anthropicApiKey;
         }
+        if (currentState.gatewayApiKey !== '') {
+          requestBody.authApiKey = currentState.gatewayApiKey;
+        }
 
         const res = await fetch(API_BASE + '/settings', {
           method: 'PUT',
@@ -537,6 +553,41 @@ export const adminScript = `<script>
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ clearAnthropicApiKey: true })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error?.message || t('settings.failedSave'));
+          return;
+        }
+
+        await fetchSettings();
+      } catch (_error) {
+        alert(t('settings.failedSave'));
+      } finally {
+        clearButton.disabled = false;
+      }
+    }
+
+    async function clearGatewayApiKey() {
+      const confirmed = await openConfirmActionModal({
+        title: t('settings.clearGatewayApiKeyConfirmTitle'),
+        message: t('settings.clearGatewayApiKeyConfirmMessage'),
+        confirmText: t('settings.clearGatewayApiKey'),
+        tone: 'danger'
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      const clearButton = document.getElementById('clearGatewayApiKeyBtn');
+      clearButton.disabled = true;
+
+      try {
+        const res = await fetch(API_BASE + '/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clearAuthApiKey: true })
         });
         const data = await res.json();
         if (!res.ok) {
@@ -1479,7 +1530,7 @@ export const adminScript = `<script>
       btn.classList.add('loading');
       try {
         const [modelsRes, premiumConfig] = await Promise.all([
-          fetch('/v1/models'),
+          fetch(API_BASE + '/models'),
           fetchPremiumMultipliers()
         ]);
         const data = await modelsRes.json();
@@ -1901,7 +1952,7 @@ export const adminScript = `<script>
       if (!useSilent) btn.classList.add('loading');
       try {
         const [usageRes, logsRes, settingsRes] = await Promise.all([
-          fetch('/usage'),
+          fetch(API_BASE + '/usage-summary'),
           fetch(getUsageLogsRequestUrl(targetCursor)),
           fetch(API_BASE + '/settings')
         ]);
@@ -2386,7 +2437,7 @@ export const adminScript = `<script>
     async function loadModelOptions() {
       const sel = document.getElementById('mappingTo');
       try {
-        const res = await fetch('/v1/models');
+        const res = await fetch(API_BASE + '/models');
         const data = await res.json();
         sel.innerHTML = '<option value="">' + t('mappings.selectTargetModel') + '</option>' +
           (data.data || []).map(function (m) { return '<option value="' + m.id + '">' + m.id + '</option>'; }).join('');
@@ -2435,8 +2486,12 @@ export const adminScript = `<script>
     document.getElementById('rateLimitSeconds').addEventListener('input', updateSettingsDirtyState);
     document.getElementById('rateLimitWait').addEventListener('change', updateSettingsDirtyState);
     document.getElementById('anthropicApiKey').addEventListener('input', updateSettingsDirtyState);
+    document.getElementById('gatewayApiKey').addEventListener('input', updateSettingsDirtyState);
     document.getElementById('clearAnthropicApiKeyBtn').addEventListener('click', function () {
       void clearAnthropicApiKey();
+    });
+    document.getElementById('clearGatewayApiKeyBtn').addEventListener('click', function () {
+      void clearGatewayApiKey();
     });
 
     document.getElementById('addMappingBtn').addEventListener('click', function () {
