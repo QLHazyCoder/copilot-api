@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto"
 
 import type { State } from "./state"
 
+import { requestContext } from "./request-context"
+
 export const standardHeaders = () => ({
   "content-type": "application/json",
   accept: "application/json",
@@ -18,6 +20,8 @@ export const copilotBaseUrl = (state: State) =>
     "https://api.githubcopilot.com"
   : `https://api.${state.accountType}.githubcopilot.com`
 export const copilotHeaders = (state: State, vision: boolean = false) => {
+  const requestId = requestContext.getStore()?.traceId ?? randomUUID()
+
   const headers: Record<string, string> = {
     Authorization: `Bearer ${state.copilotToken}`,
     "content-type": standardHeaders()["content-type"],
@@ -27,7 +31,8 @@ export const copilotHeaders = (state: State, vision: boolean = false) => {
     "user-agent": USER_AGENT,
     "openai-intent": "conversation-agent",
     "x-github-api-version": API_VERSION,
-    "x-request-id": randomUUID(),
+    "x-request-id": requestId,
+    "x-agent-task-id": requestId,
     "x-vscode-user-agent-library-version": "electron-fetch",
   }
 

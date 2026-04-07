@@ -127,6 +127,7 @@ flowchart TB
 - **使用量监控**：通过 `/usage` 查看使用与配额。
 - **速率限制控制**：支持限流与等待策略。
 - **账户类型支持**：个人 / 商业 / 企业账户。
+- **链路追踪能力**：每个请求都支持 `x-trace-id`（接收或自动生成），并将同一 ID 透传为上游 `x-request-id` / `x-agent-task-id`，便于端到端排障。
 
 ## Docker 快速开始
 
@@ -415,6 +416,7 @@ bun run knip
 - **商业/企业账户**：账户类型在 OAuth 流程中自动检测。
 - **多账户**：通过 `/admin` 添加多个账户，并根据需要在它们之间切换。
 - **Claude token 计数**：当配置了 `anthropicApiKey`（或环境变量 `ANTHROPIC_API_KEY`）时，`/v1/messages/count_tokens` 会优先调用 Anthropic 官方计数接口；若失败会自动回退本地估算。
+- **Trace 请求头**：客户端可主动传入 `x-trace-id`；若未传或格式非法，网关会自动生成并在响应头回写，同时把该 ID 透传到上游用于链路关联。
 
 ## Premium Interaction 说明
 

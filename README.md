@@ -128,6 +128,7 @@ flowchart TB
 - **Usage monitoring**: inspect usage and quota from `/usage`.
 - **Rate-limit controls**: configurable throttling and wait strategy.
 - **Account-type support**: individual / business / enterprise plans.
+- **Trace correlation**: each inbound request carries an `x-trace-id` (accepted or generated), and the same ID is propagated upstream as `x-request-id` / `x-agent-task-id` for end-to-end diagnostics.
 
 ## Quick Start with Docker
 
@@ -415,6 +416,7 @@ bun run knip
 - **Business/Enterprise Accounts**: The account type is automatically detected during OAuth flow.
 - **Multiple Accounts**: Add multiple accounts via `/admin` and switch between them as needed.
 - **Claude token counting**: `/v1/messages/count_tokens` tries Anthropic's official count endpoint first for Claude models when `anthropicApiKey` (or `ANTHROPIC_API_KEY`) is available, and falls back to local estimation on failure.
+- **Trace headers**: You can pass `x-trace-id` from the client; if absent or invalid, the gateway auto-generates one and returns it in the response header, while forwarding the same ID upstream for request correlation.
 
 ## Premium Interaction Notes
 
