@@ -1,6 +1,6 @@
 {
   "name": "copilot-api",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Turn GitHub Copilot into OpenAI/Anthropic API compatible server. Usable with Claude Code!",
   "keywords": [
     "proxy",
@@ -27,6 +27,7 @@
     "lint:all": "eslint --cache .",
     "lint:fix": "eslint --fix ./src",
     "prepare": "simple-git-hooks",
+    "release:minor": "bun run ./release-minor.mjs",
     "start": "NODE_ENV=production bun run ./src/main.ts",
     "typecheck": "tsc"
   },
