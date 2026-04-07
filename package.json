@@ -27,7 +27,6 @@
     "lint:all": "eslint --cache .",
     "lint:fix": "eslint --fix ./src",
     "prepare": "simple-git-hooks",
-    "release:minor": "bun run ./release-minor.mjs",
     "start": "NODE_ENV=production bun run ./src/main.ts",
     "typecheck": "tsc"
   },
