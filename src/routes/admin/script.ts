@@ -403,13 +403,11 @@ export const adminScript = `<script>
       const rateLimitSeconds = rawRateLimitSeconds === '' ? null : Number(rawRateLimitSeconds);
       const rateLimitWait = document.getElementById('rateLimitWait').checked;
       const anthropicApiKey = document.getElementById('anthropicApiKey').value.trim();
-      const clearAnthropicApiKey = document.getElementById('clearAnthropicApiKey').checked;
       return {
         rawRateLimitSeconds,
         rateLimitSeconds,
         rateLimitWait,
-        anthropicApiKey,
-        clearAnthropicApiKey
+        anthropicApiKey
       };
     }
 
@@ -417,20 +415,7 @@ export const adminScript = `<script>
       if (!left || !right) return false;
       return left.rateLimitSeconds === right.rateLimitSeconds
         && left.rateLimitWait === right.rateLimitWait
-        && left.anthropicApiKey === right.anthropicApiKey
-        && left.clearAnthropicApiKey === right.clearAnthropicApiKey;
-    }
-
-    function syncAnthropicApiKeyControls() {
-      const keyInput = document.getElementById('anthropicApiKey');
-      const clearToggle = document.getElementById('clearAnthropicApiKey');
-      if (!keyInput || !clearToggle) return;
-
-      const shouldClear = Boolean(clearToggle.checked);
-      keyInput.disabled = shouldClear;
-      if (shouldClear) {
-        keyInput.value = '';
-      }
+        && left.anthropicApiKey === right.anthropicApiKey;
     }
 
     function updateSettingsDirtyState() {
@@ -457,12 +442,13 @@ export const adminScript = `<script>
         document.getElementById('rateLimitSeconds').value = data.rateLimitSeconds ?? '';
         document.getElementById('rateLimitWait').checked = Boolean(data.rateLimitWait);
         document.getElementById('anthropicApiKey').value = '';
-        document.getElementById('clearAnthropicApiKey').checked = false;
+        const anthropicApiKeyStatusEl = document.getElementById('anthropicApiKeyStatus');
         const hasAnthropicApiKey = Boolean(data.hasAnthropicApiKey);
-        document.getElementById('anthropicApiKeyStatus').textContent = hasAnthropicApiKey
+        anthropicApiKeyStatusEl.textContent = hasAnthropicApiKey
           ? t('settings.anthropicApiKeyStatusSet')
           : t('settings.anthropicApiKeyStatusNotSet');
-        syncAnthropicApiKeyControls();
+        anthropicApiKeyStatusEl.classList.toggle('is-set', hasAnthropicApiKey);
+        anthropicApiKeyStatusEl.classList.toggle('is-unset', !hasAnthropicApiKey);
 
         settingsLoadedState = {
           rateLimitSeconds:
@@ -470,8 +456,7 @@ export const adminScript = `<script>
               null
             : Number(data.rateLimitSeconds),
           rateLimitWait: Boolean(data.rateLimitWait),
-          anthropicApiKey: '',
-          clearAnthropicApiKey: false
+          anthropicApiKey: ''
         };
 
         const notices = [t('settings.noticeProcessWide')];
@@ -508,8 +493,7 @@ export const adminScript = `<script>
       try {
         const requestBody = {
           rateLimitSeconds: currentState.rateLimitSeconds,
-          rateLimitWait: currentState.rateLimitWait,
-          clearAnthropicApiKey: currentState.clearAnthropicApiKey
+          rateLimitWait: currentState.rateLimitWait
         };
         if (currentState.anthropicApiKey !== '') {
           requestBody.anthropicApiKey = currentState.anthropicApiKey;
@@ -530,6 +514,41 @@ export const adminScript = `<script>
       } catch (_error) {
         alert(t('settings.failedSave'));
         updateSettingsDirtyState();
+      }
+    }
+
+    async function clearAnthropicApiKey() {
+      const confirmed = await openConfirmActionModal({
+        title: t('settings.clearAnthropicApiKeyConfirmTitle'),
+        message: t('settings.clearAnthropicApiKeyConfirmMessage'),
+        confirmText: t('settings.clearAnthropicApiKey'),
+        tone: 'danger'
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      const clearButton = document.getElementById('clearAnthropicApiKeyBtn');
+      clearButton.disabled = true;
+
+      try {
+        const res = await fetch(API_BASE + '/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clearAnthropicApiKey: true })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error?.message || t('settings.failedSave'));
+          return;
+        }
+
+        await fetchSettings();
+      } catch (_error) {
+        alert(t('settings.failedSave'));
+      } finally {
+        clearButton.disabled = false;
       }
     }
 
@@ -2416,9 +2435,8 @@ export const adminScript = `<script>
     document.getElementById('rateLimitSeconds').addEventListener('input', updateSettingsDirtyState);
     document.getElementById('rateLimitWait').addEventListener('change', updateSettingsDirtyState);
     document.getElementById('anthropicApiKey').addEventListener('input', updateSettingsDirtyState);
-    document.getElementById('clearAnthropicApiKey').addEventListener('change', function () {
-      syncAnthropicApiKeyControls();
-      updateSettingsDirtyState();
+    document.getElementById('clearAnthropicApiKeyBtn').addEventListener('click', function () {
+      void clearAnthropicApiKey();
     });
 
     document.getElementById('addMappingBtn').addEventListener('click', function () {

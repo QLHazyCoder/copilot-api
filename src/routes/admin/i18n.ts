@@ -105,16 +105,13 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
     "settings.anthropicApiKey": "Anthropic API Key",
     "settings.anthropicApiKeyPlaceholder": "Leave empty to keep current key",
     "settings.anthropicApiKeyHint":
-      "Used for official Claude /v1/messages/count_tokens. Enter a new key to replace existing one; leave empty to keep current value.",
-    "settings.clearAnthropicApiKey": "Clear saved Anthropic API key",
-    "settings.clearAnthropicApiKeyHint":
-      "Enable and save to remove the stored key.",
-    "settings.anthropicApiKeyStatusSet":
-      "Anthropic API key status: set (hidden).",
-    "settings.anthropicApiKeyStatusNotSet":
-      "Anthropic API key status: not set.",
-    "settings.anthropicApiKeyNote":
-      "This key must be a valid Anthropic API key. If unavailable or invalid, count_tokens falls back to local estimation.",
+      "This key must be a valid Anthropic API key. It is only used for accurate token counting on Claude models.",
+    "settings.clearAnthropicApiKey": "Clear saved key",
+    "settings.clearAnthropicApiKeyConfirmTitle": "Clear Anthropic API key",
+    "settings.clearAnthropicApiKeyConfirmMessage":
+      "This will remove the saved key immediately. Continue?",
+    "settings.anthropicApiKeyStatusSet": "Set",
+    "settings.anthropicApiKeyStatusNotSet": "Not set",
     "settings.loadingSettings": "Loading settings...",
     "settings.noticeProcessWide":
       "This rate limit is process-wide, not per account or per client.",
@@ -329,14 +326,13 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
     "settings.anthropicApiKey": "Anthropic API Key",
     "settings.anthropicApiKeyPlaceholder": "留空则保留当前密钥",
     "settings.anthropicApiKeyHint":
-      "用于 Claude /v1/messages/count_tokens 的官方准确计数。输入新值会替换现有密钥，留空则保留当前值。",
-    "settings.clearAnthropicApiKey": "清空已保存的 Anthropic API Key",
-    "settings.clearAnthropicApiKeyHint": "开启后保存，将删除当前已保存的密钥。",
-    "settings.anthropicApiKeyStatusSet":
-      "Anthropic API Key 状态：已设置（已隐藏）。",
-    "settings.anthropicApiKeyStatusNotSet": "Anthropic API Key 状态：未设置。",
-    "settings.anthropicApiKeyNote":
-      "该密钥必须是可用的 Anthropic API Key。若不可用或无效，count_tokens 会自动回退到本地估算。",
+      "该密钥必须是可用的 Anthropic API Key。仅用于 Claude 模型准确计数。",
+    "settings.clearAnthropicApiKey": "清空已保存密钥",
+    "settings.clearAnthropicApiKeyConfirmTitle": "清空 Anthropic API Key",
+    "settings.clearAnthropicApiKeyConfirmMessage":
+      "将立即删除当前已保存密钥，是否继续？",
+    "settings.anthropicApiKeyStatusSet": "已设置",
+    "settings.anthropicApiKeyStatusNotSet": "未设置",
     "settings.loadingSettings": "正在加载设置...",
     "settings.noticeProcessWide":
       "该限流作用于整个进程，而不是单个账号或单个客户端。",

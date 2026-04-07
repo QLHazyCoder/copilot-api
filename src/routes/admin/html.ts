@@ -721,6 +721,36 @@ export const adminHtml = `<!DOCTYPE html>
       font-weight: 600;
       margin-bottom: 0.55rem;
     }
+    .settings-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.55rem;
+    }
+    .settings-title-row .settings-section-title {
+      margin-bottom: 0;
+    }
+    .settings-status-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      border: 1px solid rgba(63, 96, 131, 0.72);
+      background: rgba(20, 33, 46, 0.9);
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      font-weight: 600;
+      line-height: 1;
+      padding: 0.28rem 0.58rem;
+      white-space: nowrap;
+    }
+    .settings-status-badge.is-set {
+      border-color: rgba(31, 157, 139, 0.62);
+      background: rgba(31, 157, 139, 0.2);
+      color: #9ce7dd;
+    }
     .input {
       width: 100%;
       padding: 0.5rem;
@@ -735,6 +765,12 @@ export const adminHtml = `<!DOCTYPE html>
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
       gap: 0.45rem;
+    }
+    .settings-inline-btn {
+      align-self: stretch;
+      min-height: 34px;
+      padding: 0 0.75rem;
+      white-space: nowrap;
     }
     .settings-input-unit {
       min-width: 34px;
@@ -1213,23 +1249,15 @@ export const adminHtml = `<!DOCTYPE html>
             </span>
           </label>
           <div class="settings-section">
-            <div class="settings-section-title" data-i18n="settings.anthropicApiKey">Anthropic API Key</div>
+            <div class="settings-title-row">
+              <div class="settings-section-title" data-i18n="settings.anthropicApiKey">Anthropic API Key</div>
+              <span class="settings-status-badge" id="anthropicApiKeyStatus" data-i18n="settings.anthropicApiKeyStatusNotSet">Not set</span>
+            </div>
             <div class="settings-input-row">
               <input class="input" id="anthropicApiKey" type="password" autocomplete="off" spellcheck="false" placeholder="Leave empty to keep current key" data-i18n-placeholder="settings.anthropicApiKeyPlaceholder">
+              <button class="btn settings-inline-btn" id="clearAnthropicApiKeyBtn" type="button" data-i18n="settings.clearAnthropicApiKey">Clear saved key</button>
             </div>
-            <p class="hint" data-i18n="settings.anthropicApiKeyHint">Used for official Claude /v1/messages/count_tokens. Enter a new key to replace existing one; leave empty to keep current value.</p>
-            <label class="settings-switch-row" for="clearAnthropicApiKey">
-              <span class="settings-switch-copy">
-                <span class="settings-switch-title" data-i18n="settings.clearAnthropicApiKey">Clear saved Anthropic API key</span>
-                <span class="settings-switch-hint" data-i18n="settings.clearAnthropicApiKeyHint">Enable and save to remove the stored key.</span>
-              </span>
-              <span class="settings-switch">
-                <input id="clearAnthropicApiKey" type="checkbox">
-                <span class="settings-switch-slider"></span>
-              </span>
-            </label>
-            <p class="hint" id="anthropicApiKeyStatus" data-i18n="settings.anthropicApiKeyStatusNotSet">Anthropic API key status: not set.</p>
-            <p class="hint" data-i18n="settings.anthropicApiKeyNote">This key must be a valid Anthropic API key. If unavailable or invalid, count_tokens falls back to local estimation.</p>
+            <p class="hint" data-i18n="settings.anthropicApiKeyHint">This key must be a valid Anthropic API key. It is only used for accurate token counting on Claude models.</p>
           </div>
           <div class="notice settings-notice" id="settingsNotice" data-i18n="settings.loadingSettings">
             Loading settings...
