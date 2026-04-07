@@ -177,7 +177,7 @@ docker run -d \
 - 按 provider 分组展示模型。
 - 支持”可见 / 隐藏”筛选与管理模式下的可见性切换。
 - 支持双击倍率进行内联编辑（premium multiplier），用于本地用量日志统计。
-- 支持为模型配置默认推理强度：根据模型实际支持的推理等级动态显示选项，当客户端未显式传推理字段时自动补入默认值。
+- 支持按模型配置推理强度（管理页）：仅当模型声明支持的推理等级时才显示选项；客户端未显式传推理字段时，代理不会自动补参。
 - 模型卡片可显示功能特性与上下文窗口等信息。
 
 ![模型可见列表](docs/images/模型可见.png)
@@ -366,7 +366,7 @@ volumes:
 | `activeAccountId` | 当前活跃账户 ID |
 | `extraPrompts` | 附加到系统消息的每模型提示 |
 | `smallModel` | 预热请求的备用模型（默认：`gpt-5-mini`） |
-| `modelReasoningEfforts` | 每模型推理强度（`none`、`minimal`、`low`、`medium`、`high`、`xhigh`） |
+| `modelReasoningEfforts` | 管理页保存的每模型推理强度偏好（`none`、`minimal`、`low`、`medium`、`high`、`xhigh`）；客户端未传推理字段时不会被代理自动补入 |
 | `modelMapping` | 模型别名映射（管理页 `Model Mappings` 的持久化配置） |
 | `premiumModelMultipliers` | 模型 premium 计费倍率配置 |
 | `modelCardMetadata` | 模型卡片扩展元数据（如 context window / features） |

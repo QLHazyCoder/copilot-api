@@ -2,11 +2,7 @@ import type { Context } from "hono"
 
 import { streamSSE } from "hono/streaming"
 
-import {
-  getConfig,
-  getMappedModel,
-  getReasoningEffortForModel,
-} from "~/lib/config"
+import { getConfig, getMappedModel } from "~/lib/config"
 import { createHandlerLogger } from "~/lib/logger"
 import { checkRateLimit } from "~/lib/rate-limit"
 import { state } from "~/lib/state"
@@ -49,14 +45,6 @@ export const handleResponses = async (c: Context) => {
   logger.debug("Responses request payload:", JSON.stringify(payload))
 
   payload.model = getMappedModel(payload.model)
-
-  // 如果请求未指定 reasoning effort，从配置中获取默认值
-  if (!hasReasoningEffort(payload)) {
-    payload.reasoning = {
-      ...payload.reasoning,
-      effort: getReasoningEffortForModel(payload.model),
-    }
-  }
 
   normalizeCustomTools(payload)
   filterUnsupportedTools(payload)
@@ -113,10 +101,6 @@ export const handleResponses = async (c: Context) => {
   )
   return c.json(response as ResponsesResult)
 }
-
-const hasReasoningEffort = (payload: ResponsesPayload): boolean =>
-  typeof payload.reasoning?.effort === "string"
-  && payload.reasoning.effort.length > 0
 
 const isAsyncIterable = <T>(value: unknown): value is AsyncIterable<T> =>
   Boolean(value)

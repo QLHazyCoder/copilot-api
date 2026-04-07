@@ -1,9 +1,6 @@
 import consola from "consola"
 
-import {
-  getExtraPromptForModel,
-  getReasoningEffortForModel,
-} from "~/lib/config"
+import { getExtraPromptForModel } from "~/lib/config"
 import {
   type ResponsesPayload,
   type ResponseInputContent,
@@ -78,11 +75,6 @@ export const translateAnthropicMessagesToResponsesPayload = (
     stream: payload.stream ?? null,
     store: false,
     parallel_tool_calls: true,
-    reasoning: {
-      effort: getReasoningEffortForModel(payload.model),
-      summary: "detailed",
-    },
-    include: ["reasoning.encrypted_content"],
   }
 
   return responsesPayload

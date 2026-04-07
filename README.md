@@ -178,7 +178,7 @@ The admin panel includes five tabs: `Accounts`, `Models`, `Usage`, `Model Mappin
 - Grouped model display by provider.
 - Visible/hidden filtering and visibility management mode.
 - Double-click inline editing for premium multipliers (used in local usage-log accounting).
-- Per-model default reasoning effort configuration: dynamically displays options based on model's supported reasoning levels, auto-fills when clients omit reasoning fields.
+- Per-model reasoning effort configuration in Admin UI: options are shown only when a model declares supported reasoning levels; the proxy does not auto-inject reasoning fields when clients omit them.
 - Model cards display feature tags and context window metadata.
 
 ![Models visible list](docs/images/模型可见.png)
@@ -366,7 +366,7 @@ The configuration file is stored at `/data/copilot-api/config.json` inside the c
 | `activeAccountId` | Currently active account ID |
 | `extraPrompts` | Per-model prompts appended to system messages |
 | `smallModel` | Fallback model for warmup requests (default: `gpt-5-mini`) |
-| `modelReasoningEfforts` | Per-model reasoning effort (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`) |
+| `modelReasoningEfforts` | Admin-side stored reasoning effort preference (`none`, `minimal`, `low`, `medium`, `high`, `xhigh`); requests are not auto-patched when clients omit reasoning fields |
 | `modelMapping` | Alias mapping rules (persisted from Admin `Model Mappings`) |
 | `premiumModelMultipliers` | Premium accounting multipliers per model |
 | `modelCardMetadata` | Extended model-card metadata (e.g. context window / features) |
