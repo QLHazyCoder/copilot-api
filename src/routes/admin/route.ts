@@ -95,6 +95,14 @@ interface ReorderAccountsRequestBody {
   accountIds: Array<string>
 }
 
+interface AdminSettingsRequestBody {
+  rateLimitSeconds?: number | null
+  rateLimitWait?: boolean
+  usageTestIntervalMinutes?: number | null
+  anthropicApiKey?: string | null
+  clearAnthropicApiKey?: boolean
+}
+
 const DEFAULT_USAGE_LOG_LIMIT = 50
 const MAX_USAGE_LOG_LIMIT = 200
 
@@ -391,6 +399,55 @@ function isValidPositiveInteger(value: number | undefined): boolean {
     isValidPositiveNumber(value)
     && (value === undefined || Number.isInteger(value))
   )
+}
+
+function resolveUsageTestIntervalMinutes(
+  value: number | null | undefined,
+  currentValue: number | null | undefined,
+): number | null | undefined {
+  if (value !== undefined) {
+    return value
+  }
+
+  return currentValue === undefined ? 10 : currentValue
+}
+
+function isValidUsageTestIntervalMinutes(
+  value: number | null | undefined,
+): boolean {
+  if (value === null) {
+    return true
+  }
+
+  return isValidPositiveInteger(value)
+}
+
+function resolveAnthropicApiKey(
+  body: AdminSettingsRequestBody,
+  currentValue: string | undefined,
+): string | undefined {
+  if (body.clearAnthropicApiKey === true) {
+    return undefined
+  }
+
+  if (body.anthropicApiKey === undefined || body.anthropicApiKey === null) {
+    return currentValue
+  }
+
+  const nextValue = body.anthropicApiKey.trim()
+  return nextValue || currentValue
+}
+
+function syncRateLimitState(
+  rateLimitSeconds: number | undefined,
+  rateLimitWait: boolean,
+): void {
+  state.rateLimitSeconds =
+    process.env.RATE_LIMIT === undefined ?
+      rateLimitSeconds
+    : state.rateLimitSeconds
+  state.rateLimitWait =
+    process.env.RATE_LIMIT_WAIT === undefined ? rateLimitWait : state.rateLimitWait
 }
 
 function getModelSupportedReasoningEfforts(model: {
@@ -1147,13 +1204,7 @@ adminRoutes.get("/api/settings", (c) => {
 })
 
 adminRoutes.put("/api/settings", async (c) => {
-  const body = await c.req.json<{
-    rateLimitSeconds?: number | null
-    rateLimitWait?: boolean
-    usageTestIntervalMinutes?: number | null
-    anthropicApiKey?: string | null
-    clearAnthropicApiKey?: boolean
-  }>()
+  const body = await c.req.json<AdminSettingsRequestBody>()
 
   const config = getConfig()
 
@@ -1176,19 +1227,12 @@ adminRoutes.put("/api/settings", async (c) => {
 
   const rateLimitWait = body.rateLimitWait ?? config.rateLimitWait ?? false
 
-  const currentUsageTestIntervalMinutes =
-    config.usageTestIntervalMinutes === undefined ?
-      10
-    : config.usageTestIntervalMinutes
-  const usageTestIntervalMinutes =
-    body.usageTestIntervalMinutes === undefined ?
-      currentUsageTestIntervalMinutes
-    : body.usageTestIntervalMinutes
+  const usageTestIntervalMinutes = resolveUsageTestIntervalMinutes(
+    body.usageTestIntervalMinutes,
+    config.usageTestIntervalMinutes,
+  )
 
-  if (
-    usageTestIntervalMinutes !== null
-    && !isValidPositiveInteger(usageTestIntervalMinutes)
-  ) {
+  if (!isValidUsageTestIntervalMinutes(usageTestIntervalMinutes)) {
     return c.json(
       {
         error: {
@@ -1201,18 +1245,10 @@ adminRoutes.put("/api/settings", async (c) => {
     )
   }
 
-  const clearAnthropicApiKey = body.clearAnthropicApiKey === true
-  const currentAnthropicApiKey = config.anthropicApiKey?.trim() || undefined
-
-  let anthropicApiKey = currentAnthropicApiKey
-  if (clearAnthropicApiKey) {
-    anthropicApiKey = undefined
-  } else if (body.anthropicApiKey !== undefined && body.anthropicApiKey !== null) {
-    const nextAnthropicApiKey = body.anthropicApiKey.trim()
-    if (nextAnthropicApiKey) {
-      anthropicApiKey = nextAnthropicApiKey
-    }
-  }
+  const anthropicApiKey = resolveAnthropicApiKey(
+    body,
+    config.anthropicApiKey?.trim() || undefined,
+  )
 
   await saveConfig({
     ...config,
@@ -1222,14 +1258,7 @@ adminRoutes.put("/api/settings", async (c) => {
     anthropicApiKey,
   })
 
-  state.rateLimitSeconds =
-    process.env.RATE_LIMIT === undefined ?
-      rateLimitSeconds
-    : state.rateLimitSeconds
-  state.rateLimitWait =
-    process.env.RATE_LIMIT_WAIT === undefined ?
-      rateLimitWait
-    : state.rateLimitWait
+  syncRateLimitState(rateLimitSeconds, rateLimitWait)
 
   return c.json({
     success: true,
