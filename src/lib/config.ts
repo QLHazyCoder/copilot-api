@@ -25,6 +25,8 @@ export type ReasoningEffort =
   | "high"
   | "xhigh"
 
+export type UsageLogCountMode = "request" | "conversation"
+
 export interface AuthConfig {
   apiKey?: string
   apiKeys?: Array<string>
@@ -44,6 +46,7 @@ export interface AppConfig {
   rateLimitSeconds?: number
   rateLimitWait?: boolean
   usageTestIntervalMinutes?: number | null
+  usageLogCountMode?: UsageLogCountMode
   // Account management
   accounts?: Array<AccountConfig>
   activeAccountId?: string | null
@@ -90,6 +93,7 @@ const defaultConfig: AppConfig = {
   hiddenModels: [],
   rateLimitWait: false,
   usageTestIntervalMinutes: 10,
+  usageLogCountMode: "request",
   accounts: [],
   activeAccountId: null,
 }
@@ -104,6 +108,10 @@ const VALID_REASONING_EFFORTS = new Set<ReasoningEffort>([
   "high",
   "xhigh",
 ])
+const VALID_USAGE_LOG_COUNT_MODES = new Set<UsageLogCountMode>([
+  "request",
+  "conversation",
+])
 
 export function isValidReasoningEffort(
   value: unknown,
@@ -112,6 +120,19 @@ export function isValidReasoningEffort(
     typeof value === "string"
     && VALID_REASONING_EFFORTS.has(value as ReasoningEffort)
   )
+}
+
+export function isValidUsageLogCountMode(
+  value: unknown,
+): value is UsageLogCountMode {
+  return (
+    typeof value === "string"
+    && VALID_USAGE_LOG_COUNT_MODES.has(value as UsageLogCountMode)
+  )
+}
+
+export function normalizeUsageLogCountMode(value: unknown): UsageLogCountMode {
+  return isValidUsageLogCountMode(value) ? value : "request"
 }
 
 function ensureConfigFile(): void {
@@ -206,15 +227,40 @@ function mergeDefaultPremiumModelMultipliers(config: AppConfig): {
   }
 }
 
+function mergeDefaultUsageLogCountMode(config: AppConfig): {
+  mergedConfig: AppConfig
+  changed: boolean
+} {
+  const usageLogCountMode = normalizeUsageLogCountMode(config.usageLogCountMode)
+  const changed = config.usageLogCountMode !== usageLogCountMode
+
+  if (!changed) {
+    return { mergedConfig: config, changed: false }
+  }
+
+  return {
+    mergedConfig: {
+      ...config,
+      usageLogCountMode,
+    },
+    changed: true,
+  }
+}
+
 export function mergeConfigWithDefaults(): AppConfig {
   const config = readConfigFromDisk()
   const extraPromptMergeResult = mergeDefaultExtraPrompts(config)
   const premiumMultiplierMergeResult = mergeDefaultPremiumModelMultipliers(
     extraPromptMergeResult.mergedConfig,
   )
-  const mergedConfig = premiumMultiplierMergeResult.mergedConfig
+  const usageLogCountModeMergeResult = mergeDefaultUsageLogCountMode(
+    premiumMultiplierMergeResult.mergedConfig,
+  )
+  const mergedConfig = usageLogCountModeMergeResult.mergedConfig
   const changed =
-    extraPromptMergeResult.changed || premiumMultiplierMergeResult.changed
+    extraPromptMergeResult.changed
+    || premiumMultiplierMergeResult.changed
+    || usageLogCountModeMergeResult.changed
 
   if (changed) {
     try {
@@ -245,8 +291,12 @@ export function getConfig(): AppConfig {
  */
 export async function saveConfig(config: AppConfig): Promise<void> {
   ensureConfigFile()
-  cachedConfig = config
-  const content = `${JSON.stringify(config, null, 2)}\n`
+  const normalizedConfig = {
+    ...config,
+    usageLogCountMode: normalizeUsageLogCountMode(config.usageLogCountMode),
+  } satisfies AppConfig
+  cachedConfig = normalizedConfig
+  const content = `${JSON.stringify(normalizedConfig, null, 2)}\n`
   await fs.promises.writeFile(PATHS.CONFIG_PATH, content, "utf8")
 }
 
@@ -285,4 +335,8 @@ export function getAnthropicApiKey(): string | undefined {
 
   const envApiKey = process.env.ANTHROPIC_API_KEY?.trim()
   return envApiKey || undefined
+}
+
+export function getUsageLogCountMode(): UsageLogCountMode {
+  return normalizeUsageLogCountMode(getConfig().usageLogCountMode)
 }

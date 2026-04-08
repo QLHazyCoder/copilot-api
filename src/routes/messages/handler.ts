@@ -6,7 +6,7 @@ import { streamSSE } from "hono/streaming"
 import { getMappedModel, getSmallModel } from "~/lib/config"
 import { createHandlerLogger } from "~/lib/logger"
 import { checkRateLimit } from "~/lib/rate-limit"
-import { getRootSessionId } from "~/lib/session"
+import { resolveConversationIdFromAnthropicPayload } from "~/lib/session"
 import { state } from "~/lib/state"
 import {
   buildErrorEvent,
@@ -63,8 +63,21 @@ export async function handleCompletion(c: Context) {
     logger.debug("Detected Subagent marker:", JSON.stringify(subagentMarker))
   }
 
-  const sessionId = getRootSessionId(anthropicPayload, c)
-  logger.debug("Extracted session ID:", sessionId)
+  const conversationResolution = resolveConversationIdFromAnthropicPayload(
+    anthropicPayload,
+    c,
+  )
+  const sessionId = conversationResolution.conversationId
+  if (state.isDevelopment) {
+    logger.info("Resolved conversation context for Messages request:", {
+      source: conversationResolution.source,
+      rawValue: conversationResolution.rawValue ?? null,
+      conversationId: sessionId ?? null,
+      metadataUserId: anthropicPayload.metadata?.user_id ?? null,
+      xInteractionId: c.req.header("x-interaction-id") ?? null,
+      xSessionId: c.req.header("x-session-id") ?? null,
+    })
+  }
 
   // fix claude code 2.0.28+ warmup request consume premium request, forcing small model if no tools are used
   // set "CLAUDE_CODE_SUBAGENT_MODEL": "you small model" also can avoid this

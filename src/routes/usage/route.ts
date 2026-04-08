@@ -100,7 +100,7 @@ function runGpt4oHealthCheck(): Promise<boolean | null> {
       max_tokens: 1,
       temperature: 0,
     },
-    { initiator: "agent" },
+    { initiator: "agent", skipUsageLog: true },
   )
     .then(() => true)
     .catch(() => false)

@@ -189,9 +189,16 @@ docker run -d \
 ### Usage（用量）
 - 提供用量概览与请求日志列表。
 - 日志按当前活跃账户隔离存储，不同账号数据不混合。
+- 支持本地 usage log 统计模式切换：
+  - `request`：每次请求都记录一次
+  - `conversation`：只有在同一对话下 `endpoint`、`model`、`multiplier` 都相同时才折叠为同一条；只要这些关键字段之一变化，就会新增一条本地日志并重新触发一次本地 usage 摘要刷新
+- 新增本地 `额度增量` 列：
+  - `max(lastPremiumUsed - firstPremiumUsed, 0) + multiplier`
+  - 第一条请求先按当前倍率计入，后续请求再叠加上游高级额度累计值的增量
 - 支持按 `source`（`all` / `request`）筛选与游标分页；`endpoint` 当前为展示字段，尚非独立筛选条件。
 - 可配置测试/轮询间隔；默认间隔来自配置（默认 10 分钟），测试请求默认模型为 `gpt-4o`。
 - 每月日志清理为“按写入时惰性清理”（写入新日志时清理非当月数据），不是固定时刻定时任务。
+- 上述统计模式只影响本地 `usage_logs` 展示与摘要刷新策略，不改变 `/usage` 返回的上游 Copilot 真实计量。
 
 ![用量查看](docs/images/用量查看.png)
 
@@ -377,6 +384,7 @@ volumes:
 | `rateLimitSeconds` | 当未设置 `RATE_LIMIT` 环境变量时，保存的全局最小请求间隔 |
 | `rateLimitWait` | 当未设置 `RATE_LIMIT_WAIT` 环境变量时，命中限流后的保存等待策略 |
 | `usageTestIntervalMinutes` | `/usage` 页面测试/轮询间隔分钟数（可为 `null`） |
+| `usageLogCountMode` | 本地 usage log 统计模式：`request` 或 `conversation`（`conversation` 按 conversation id + endpoint/model/multiplier 去重） |
 
 ## 开发
 

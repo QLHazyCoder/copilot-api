@@ -105,6 +105,10 @@ export const adminScript = `<script>
       return value === 'hidden' ? 'hidden' : 'visible';
     }
 
+    function normalizeUsageLogCountMode(value) {
+      return value === 'conversation' ? 'conversation' : 'request';
+    }
+
     function setModelVisibilityFilter(value, persist) {
       modelVisibilityFilter = normalizeModelVisibilityFilter(value);
       if (persist) {
@@ -1901,6 +1905,42 @@ export const adminScript = `<script>
       }
     }
 
+    async function saveUsageLogCountMode(select) {
+      const previousValue = normalizeUsageLogCountMode(select.dataset.savedValue);
+      const nextValue = normalizeUsageLogCountMode(select.value);
+
+      if (previousValue === nextValue) {
+        select.value = previousValue;
+        return;
+      }
+
+      select.disabled = true;
+      try {
+        const res = await fetch(API_BASE + '/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usageLogCountMode: nextValue })
+        });
+        const payload = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          alert(payload.error?.message || t('usage.failedSaveCountMode'));
+          select.value = previousValue;
+          return;
+        }
+
+        const savedValue = normalizeUsageLogCountMode(payload.settings?.usageLogCountMode);
+        select.dataset.savedValue = savedValue;
+        select.value = savedValue;
+        resetUsageLogPagination();
+        void fetchUsage(true);
+      } catch (_error) {
+        alert(t('usage.failedSaveCountMode'));
+        select.value = previousValue;
+      } finally {
+        select.disabled = false;
+      }
+    }
+
     async function fetchUsage(options) {
       const btn = document.getElementById('refreshUsage');
       const useSilent = options === true || (options && typeof options === 'object' && options.silent === true);
@@ -2010,7 +2050,8 @@ export const adminScript = `<script>
         }
 
         const testIntervalMinutes = normalizeUsageTestIntervalMinutes(settingsPayload.usageTestIntervalMinutes);
-        renderUsage(data, logs, testIntervalMinutes, usageLogLoadErrorMessage);
+        const usageLogCountMode = normalizeUsageLogCountMode(settingsPayload.usageLogCountMode);
+        renderUsage(data, logs, testIntervalMinutes, usageLogCountMode, usageLogLoadErrorMessage);
       } catch (_error) {
         if (requestSeq !== usageLogsRequestSeq) {
           return;
@@ -2025,7 +2066,7 @@ export const adminScript = `<script>
       }
     }
 
-    function renderUsage(data, logs, testIntervalMinutes, logsErrorMessage) {
+    function renderUsage(data, logs, testIntervalMinutes, usageLogCountMode, logsErrorMessage) {
       const container = document.getElementById('usageContent');
       if (!data.quota_snapshots) {
         container.innerHTML = '<div class="empty-state">' + t('usage.noData') + '</div>';
@@ -2033,10 +2074,15 @@ export const adminScript = `<script>
       }
 
       const quotas = data.quota_snapshots;
-      const resetDateText = escapeHtml(data.quota_reset_date ? formatDate(data.quota_reset_date) : t('usage.na'));
       const chatEnabledText = escapeHtml(data.chat_enabled ? t('usage.yes') : t('usage.no'));
       const intervalInputRawValue = testIntervalMinutes === null ? '' : String(testIntervalMinutes);
       const intervalInputDisplayValue = getTestIntervalDisplayValue(intervalInputRawValue);
+      const normalizedUsageLogCountMode = normalizeUsageLogCountMode(usageLogCountMode);
+      const usageLogCountModeRequestSelected =
+        normalizedUsageLogCountMode === 'request' ? ' selected' : '';
+      const usageLogCountModeConversationSelected =
+        normalizedUsageLogCountMode === 'conversation' ? ' selected' : '';
+      const showConversationColumns = normalizedUsageLogCountMode === 'conversation';
 
       let html = '<div class="usage-grid">';
 
@@ -2057,8 +2103,8 @@ export const adminScript = `<script>
 
       html += '<div class="usage-card usage-summary-card">'
         + '<div class="usage-info-row"><span class="usage-info-label">' + t('usage.chatEnabled') + '</span><span>' + chatEnabledText + '</span></div>'
-        + '<div class="usage-info-row"><span class="usage-info-label">' + t('usage.quotaResetDate') + '</span><span>' + resetDateText + '</span></div>'
         + '<div class="usage-info-row"><span class="usage-info-label">' + t('usage.testInterval') + '</span><span class="usage-info-control"><input class="usage-summary-input" id="usageTestIntervalMinutesInput" type="text" value="' + escapeHtml(intervalInputDisplayValue) + '" readonly autocomplete="off" spellcheck="false"></span></div>'
+        + '<div class="usage-info-row"><span class="usage-info-label">' + t('usage.countMode') + '</span><span class="usage-info-control"><select class="usage-summary-input" id="usageLogCountModeSelect"><option value="request"' + usageLogCountModeRequestSelected + '>' + escapeHtml(t('usage.countModeRequest')) + '</option><option value="conversation"' + usageLogCountModeConversationSelected + '>' + escapeHtml(t('usage.countModeConversation')) + '</option></select></span></div>'
         + '</div>';
 
       html += '</div>';
@@ -2073,26 +2119,29 @@ export const adminScript = `<script>
       } else {
         html += '<div class="usage-log-table-wrap"><table class="usage-log-table">'
           + '<thead><tr>'
-          + '<th>' + t('usage.logTime') + '</th>'
-          + '<th>' + t('usage.logSource') + '</th>'
+          + '<th>' + t(showConversationColumns ? 'usage.logLastSeen' : 'usage.logTime') + '</th>'
           + '<th>' + t('usage.logResponseType') + '</th>'
-          + '<th>' + t('usage.logStatusCode') + '</th>'
           + '<th class="usage-log-source-head"><span class="usage-log-source-text">' + t('usage.logEndpoint') + '</span>' + endpointHeaderFilter + '</th>'
           + '<th>' + t('usage.logModel') + '</th>'
           + '<th>' + t('usage.logMultiplier') + '</th>'
+          + (showConversationColumns ? '<th>' + t('usage.logRequestCount') + '</th>' : '')
+          + '<th>' + t('usage.logQuotaDelta') + '</th>'
           + '<th>' + t('usage.logPremium') + '</th>'
           + '<th>' + t('usage.logChat') + '</th>'
           + '<th>' + t('usage.logCompletions') + '</th>'
           + '</tr></thead><tbody>';
 
         html += usageLogs.map(function (log) {
-          const createdAt =
-            typeof log.createdAt === 'string' ?
-              escapeHtml(formatDateTime(log.createdAt))
+          const timeValue =
+            showConversationColumns ?
+              log.lastSeenAt
+            : log.createdAt;
+          const timeText =
+            typeof timeValue === 'string' ?
+              escapeHtml(formatDateTime(timeValue))
             : escapeHtml(t('usage.unknown'));
           const emptyCellText = '——';
 
-          const source = t('usage.logSourceRequest');
           let responseTypeText = emptyCellText;
           let responseTypeClass = '';
           if (log.responseType === 'streaming') {
@@ -2108,10 +2157,6 @@ export const adminScript = `<script>
             responseTypeClass ?
               '<span class="usage-response-badge ' + responseTypeClass + '">' + escapeHtml(responseTypeText) + '</span>'
             : escapeHtml(responseTypeText);
-          const statusCode =
-            typeof log.statusCode === 'number' && Number.isFinite(log.statusCode) ?
-              String(Math.trunc(log.statusCode))
-            : emptyCellText;
           const endpoint =
             typeof log.endpoint === 'string' && log.endpoint ?
               escapeHtml(log.endpoint)
@@ -2124,6 +2169,14 @@ export const adminScript = `<script>
             typeof log.multiplier === 'number' && Number.isFinite(log.multiplier) ?
               escapeHtml(formatNumber(log.multiplier))
             : escapeHtml(emptyCellText);
+          const requestCount =
+            typeof log.requestCount === 'number' && Number.isFinite(log.requestCount) ?
+              escapeHtml(formatNumber(log.requestCount))
+            : escapeHtml('1');
+          const quotaDelta =
+            typeof log.quotaDelta === 'number' && Number.isFinite(log.quotaDelta) ?
+              escapeHtml(formatNumber(log.quotaDelta))
+            : escapeHtml('0');
           const premiumUsed =
             typeof log.premiumUsed === 'number' && Number.isFinite(log.premiumUsed) ?
               formatNumber(log.premiumUsed)
@@ -2146,13 +2199,13 @@ export const adminScript = `<script>
           const completionsText = escapeHtml(completionsUsed);
 
           return '<tr>'
-            + '<td>' + createdAt + '</td>'
-            + '<td>' + escapeHtml(source) + '</td>'
+            + '<td>' + timeText + '</td>'
             + '<td>' + responseType + '</td>'
-            + '<td>' + escapeHtml(statusCode) + '</td>'
             + '<td>' + endpoint + '</td>'
             + '<td>' + model + '</td>'
             + '<td>' + multiplier + '</td>'
+            + (showConversationColumns ? '<td>' + requestCount + '</td>' : '')
+            + '<td>' + quotaDelta + '</td>'
             + '<td>' + premiumText + '</td>'
             + '<td>' + chatText + '</td>'
             + '<td>' + completionsText + '</td>'
@@ -2252,6 +2305,16 @@ export const adminScript = `<script>
           return;
         }
         void saveUsageTestInterval(intervalInput);
+      });
+
+      const countModeSelect = document.getElementById('usageLogCountModeSelect');
+      if (!countModeSelect) {
+        return;
+      }
+
+      countModeSelect.dataset.savedValue = normalizedUsageLogCountMode;
+      countModeSelect.addEventListener('change', function () {
+        void saveUsageLogCountMode(countModeSelect);
       });
     }
 

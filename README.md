@@ -189,9 +189,16 @@ The admin panel includes five tabs: `Accounts`, `Models`, `Usage`, `Model Mappin
 ### Usage
 - Usage overview cards plus request log list.
 - Logs are isolated by active account (no cross-account mixing).
+- Supports local usage-log count modes:
+  - `request`: log every request
+  - `conversation`: dedupe only when the same conversation keeps the same `endpoint` + `model` + `multiplier`; if any of those fields changes, a new local log row is created and the local usage summary is refreshed again
+- Adds a local `Quota Delta` column:
+  - `max(lastPremiumUsed - firstPremiumUsed, 0) + multiplier`
+  - The first request is counted by the row's multiplier, and later requests add the observed upstream premium-usage increment
 - Supports `source` filtering (`all` / `request`) and cursor pagination; `endpoint` is currently display-only, not an independent filter.
 - Configurable usage test/poll interval; default interval comes from config (default 10 minutes), and the test request uses `gpt-4o`.
 - Monthly cleanup is lazy-on-write (cleanup runs when new logs are appended), not an exact cron trigger.
+- This mode only affects local `usage_logs` behavior and summary-refresh strategy. It does not change the upstream Copilot billing data returned by `/usage`.
 
 ![Usage page](docs/images/用量查看.png)
 
@@ -377,6 +384,7 @@ The configuration file is stored at `/data/copilot-api/config.json` inside the c
 | `rateLimitSeconds` | Saved global minimum interval between requests when `RATE_LIMIT` env is not set |
 | `rateLimitWait` | Saved wait behavior when rate limit is hit and `RATE_LIMIT_WAIT` env is not set |
 | `usageTestIntervalMinutes` | Usage test/poll interval in minutes (can be `null`) |
+| `usageLogCountMode` | Local usage-log count mode: `request` or `conversation` (`conversation` dedupes by conversation id + endpoint/model/multiplier) |
 
 ## Development
 

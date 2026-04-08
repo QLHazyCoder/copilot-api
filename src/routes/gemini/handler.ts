@@ -5,6 +5,7 @@ import { streamSSE, type SSEMessage } from "hono/streaming"
 import { getMappedModel } from "~/lib/config"
 import { createHandlerLogger } from "~/lib/logger"
 import { checkRateLimit } from "~/lib/rate-limit"
+import { resolveConversationIdFromHeaders } from "~/lib/session"
 import { state } from "~/lib/state"
 import { cacheModels } from "~/lib/utils"
 import { getChatFallbackCapabilities } from "~/routes/chat-completions/responses-fallback"
@@ -46,6 +47,17 @@ export const handleGeminiCompletion = async (c: Context) => {
   }
 
   const payload = await c.req.json<GeminiGenerateContentRequest>()
+  const conversationResolution = resolveConversationIdFromHeaders(c)
+  const sessionId = conversationResolution.conversationId
+  if (state.isDevelopment) {
+    logger.info("Resolved conversation context for Gemini request:", {
+      source: conversationResolution.source,
+      rawValue: conversationResolution.rawValue ?? null,
+      conversationId: sessionId ?? null,
+      xInteractionId: c.req.header("x-interaction-id") ?? null,
+      xSessionId: c.req.header("x-session-id") ?? null,
+    })
+  }
   if (!hasAnyTextInput(payload)) {
     return c.json(
       {
@@ -96,10 +108,10 @@ export const handleGeminiCompletion = async (c: Context) => {
   )
 
   if (parsedRequest.stream) {
-    return await handleStreamingResponse(c, chatPayload)
+    return await handleStreamingResponse(c, chatPayload, sessionId)
   }
 
-  const response = await createChatCompletions(chatPayload)
+  const response = await createChatCompletions(chatPayload, { sessionId })
   const geminiResponse = toGeminiNonStreamResponse(
     response as ChatCompletionResponse,
   )
@@ -134,8 +146,9 @@ const resolveModel = async (model: string) => {
 const handleStreamingResponse = async (
   c: Context,
   chatPayload: Parameters<typeof createChatCompletions>[0],
+  sessionId: string | undefined,
 ) => {
-  const response = await createChatCompletions(chatPayload)
+  const response = await createChatCompletions(chatPayload, { sessionId })
 
   if (!isAsyncIterable(response)) {
     logger.error(

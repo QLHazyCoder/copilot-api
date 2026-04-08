@@ -5,6 +5,7 @@ import { streamSSE } from "hono/streaming"
 import { getConfig, getMappedModel } from "~/lib/config"
 import { createHandlerLogger } from "~/lib/logger"
 import { checkRateLimit } from "~/lib/rate-limit"
+import { resolveConversationIdFromResponsesPayload } from "~/lib/session"
 import { state } from "~/lib/state"
 import {
   createResponses,
@@ -45,6 +46,21 @@ export const handleResponses = async (c: Context) => {
   logger.debug("Responses request payload:", JSON.stringify(payload))
 
   payload.model = getMappedModel(payload.model)
+  const conversationResolution = resolveConversationIdFromResponsesPayload(
+    payload,
+    c,
+  )
+  const sessionId = conversationResolution.conversationId
+  if (state.isDevelopment) {
+    logger.info("Resolved conversation context for Responses request:", {
+      source: conversationResolution.source,
+      rawValue: conversationResolution.rawValue ?? null,
+      conversationId: sessionId ?? null,
+      promptCacheKey: payload.prompt_cache_key ?? null,
+      xInteractionId: c.req.header("x-interaction-id") ?? null,
+      xSessionId: c.req.header("x-session-id") ?? null,
+    })
+  }
 
   normalizeCustomTools(payload)
   filterUnsupportedTools(payload)
@@ -70,7 +86,11 @@ export const handleResponses = async (c: Context) => {
 
   const { vision, initiator } = getResponsesRequestOptions(payload)
 
-  const response = await createResponses(payload, { vision, initiator })
+  const response = await createResponses(payload, {
+    vision,
+    initiator,
+    sessionId,
+  })
 
   if (isStreamingRequested(payload) && isAsyncIterable(response)) {
     logger.debug("Forwarding native Responses stream")

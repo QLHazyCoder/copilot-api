@@ -484,10 +484,11 @@ export const adminHtml = `<!DOCTYPE html>
     .usage-summary-card {
       display: grid;
       grid-template-rows: repeat(3, minmax(0, 1fr));
+      align-items: stretch;
       gap: 0.2rem;
       padding: 0.7rem;
     }
-    .usage-summary-card .usage-info-row { padding: 0.16rem 0; font-size: 0.9rem; align-items: center; }
+    .usage-summary-card .usage-info-row { height: 100%; min-height: 0; padding: 0; font-size: 0.9rem; align-items: center; }
     .usage-summary-card .usage-info-label { font-size: 0.9rem; }
     .usage-summary-card .usage-summary-input { font-size: 0.9rem; }
     .usage-info-row { display: flex; justify-content: space-between; padding: 0.25rem 0; gap: 0.75rem; }

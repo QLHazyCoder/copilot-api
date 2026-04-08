@@ -9,16 +9,19 @@ import {
   copilotHeaders,
   prepareSubagentHeaders,
 } from "~/lib/api-config"
-import { getConfig } from "~/lib/config"
+import { getConfig, getUsageLogCountMode } from "~/lib/config"
 import { ContextOverflowError, isContextOverflow } from "~/lib/copilot-error"
 import { copilotTokenManager } from "~/lib/copilot-token-manager"
 import { HTTPError } from "~/lib/error"
+import { createHandlerLogger } from "~/lib/logger"
 import { state } from "~/lib/state"
 import {
   appendUsageRequestLog,
   updateRequestUsageLogSummary,
 } from "~/lib/usage-log-store"
 import { getCopilotUsage } from "~/services/github/get-copilot-usage"
+
+const usageLogger = createHandlerLogger("usage-log")
 
 /**
  * Create a custom fetch that handles Copilot token refresh on 401/403.
@@ -140,24 +143,15 @@ export interface CopilotRequestOptions {
   subagentMarker?: SubagentMarker | null
   /** Session ID for x-interaction-id header */
   sessionId?: string
+  /** Skip local usage log persistence for internal system requests */
+  skipUsageLog?: boolean
   /** Additional headers to merge (e.g. anthropic-beta) */
   extraHeaders?: Record<string, string>
 }
 
-/**
- * Low-level Copilot API request function.
- *
- * Combines the provider's auth/retry infrastructure with the project's
- * existing header construction. Returns a raw Response object that can
- * be consumed directly via `events(response)` for SSE or `.json()` for
- * non-streaming.
- *
- * This replaces `fetchCopilotWithRetry()` as the single entry point
- * for all Copilot API calls.
- */
-export async function copilotRequest(
+function buildCopilotRequestHeaders(
   options: CopilotRequestOptions,
-): Promise<Response> {
+): Record<string, string> {
   const headers: Record<string, string> = {
     ...copilotHeaders(state, options.vision),
   }
@@ -176,6 +170,139 @@ export async function copilotRequest(
     Object.assign(headers, options.extraHeaders)
   }
 
+  return headers
+}
+
+async function throwRequestError(
+  options: CopilotRequestOptions,
+  response: Response,
+): Promise<never> {
+  const errorText = await response
+    .clone()
+    .text()
+    .catch(() => "")
+  if (isContextOverflow(errorText)) {
+    throw new ContextOverflowError(errorText, response.status, errorText)
+  }
+  consola.error(`Failed to request ${options.path}`, response)
+  throw new HTTPError(`Failed to request ${options.path}`, response)
+}
+
+function getResponseType(response: Response): "streaming" | "non_streaming" {
+  const responseContentType = response.headers.get("content-type")
+  const isStreamingResponse =
+    typeof responseContentType === "string"
+    && responseContentType.toLowerCase().includes("text/event-stream")
+
+  return isStreamingResponse ? "streaming" : "non_streaming"
+}
+
+function logConversationUsageDecision({
+  options,
+  model,
+  multiplier,
+  response,
+  responseType,
+  requestLog,
+}: {
+  options: CopilotRequestOptions
+  model: string | undefined
+  multiplier: number
+  response: Response
+  responseType: "streaming" | "non_streaming"
+  requestLog: ReturnType<typeof appendUsageRequestLog>
+}): void {
+  if (!state.isDevelopment) {
+    return
+  }
+
+  usageLogger.info("Usage log decision for conversation-mode request:", {
+    path: options.path,
+    model: model ?? null,
+    responseType,
+    statusCode: response.status,
+    multiplier,
+    requestedConversationId: options.sessionId ?? null,
+    effectiveConversationId: requestLog.conversationId,
+    conversationVariantKey: requestLog.conversationVariantKey,
+    effectiveCountMode: requestLog.effectiveCountMode,
+    inserted: requestLog.inserted,
+    reason: requestLog.reason,
+    logId: requestLog.logId,
+  })
+
+  usageLogger.info("Scheduled usage summary refresh for conversation log:", {
+    logId: requestLog.logId,
+    path: options.path,
+    reason: requestLog.reason,
+  })
+}
+
+function persistUsageLogForPostRequest(
+  options: CopilotRequestOptions,
+  response: Response,
+): void {
+  try {
+    const model = getRequestModel(options.body)
+    const usage = getRequestUsageDelta(model)
+    const countMode = getUsageLogCountMode()
+    const responseType = getResponseType(response)
+    const requestLog = appendUsageRequestLog({
+      accountId: getConfig().activeAccountId ?? null,
+      endpoint: options.path,
+      responseType,
+      statusCode: response.status,
+      model,
+      multiplier: usage.multiplier,
+      delta: usage.delta,
+      countMode,
+      conversationId: options.sessionId ?? null,
+    })
+
+    if (countMode === "conversation") {
+      logConversationUsageDecision({
+        options,
+        model,
+        multiplier: usage.multiplier,
+        response,
+        responseType,
+        requestLog,
+      })
+    }
+
+    scheduleRequestUsageSummaryRefresh(requestLog.logId)
+  } catch {
+    // Ignore usage log persistence errors
+  }
+}
+
+function logSkippedUsageLog(options: CopilotRequestOptions): void {
+  if (!state.isDevelopment) {
+    return
+  }
+
+  usageLogger.info("Skipped local usage log for internal request:", {
+    path: options.path,
+    model: getRequestModel(options.body) ?? null,
+    sessionId: options.sessionId ?? null,
+  })
+}
+
+/**
+ * Low-level Copilot API request function.
+ *
+ * Combines the provider's auth/retry infrastructure with the project's
+ * existing header construction. Returns a raw Response object that can
+ * be consumed directly via `events(response)` for SSE or `.json()` for
+ * non-streaming.
+ *
+ * This replaces `fetchCopilotWithRetry()` as the single entry point
+ * for all Copilot API calls.
+ */
+export async function copilotRequest(
+  options: CopilotRequestOptions,
+): Promise<Response> {
+  const headers = buildCopilotRequestHeaders(options)
   const copilotFetch = createCopilotFetch()
   const url = `${copilotBaseUrl(state)}${options.path}`
   const method = options.method ?? "POST"
@@ -189,41 +316,13 @@ export async function copilotRequest(
   })
 
   if (!response.ok) {
-    const errorText = await response
-      .clone()
-      .text()
-      .catch(() => "")
-    if (isContextOverflow(errorText)) {
-      throw new ContextOverflowError(errorText, response.status, errorText)
-    }
-    consola.error(`Failed to request ${options.path}`, response)
-    throw new HTTPError(`Failed to request ${options.path}`, response)
+    await throwRequestError(options, response)
   }
 
-  if (method === "POST") {
-    try {
-      const model = getRequestModel(options.body)
-      const usage = getRequestUsageDelta(model)
-      const responseContentType = response.headers.get("content-type")
-      const isStreamingResponse =
-        typeof responseContentType === "string"
-        && responseContentType.toLowerCase().includes("text/event-stream")
-      const responseType: "streaming" | "non_streaming" =
-        isStreamingResponse ? "streaming" : "non_streaming"
-
-      const requestLogId = appendUsageRequestLog({
-        accountId: getConfig().activeAccountId ?? null,
-        endpoint: options.path,
-        responseType,
-        statusCode: response.status,
-        model,
-        multiplier: usage.multiplier,
-        delta: usage.delta,
-      })
-      scheduleRequestUsageSummaryRefresh(requestLogId)
-    } catch {
-      // Ignore usage log persistence errors
-    }
+  if (method === "POST" && !options.skipUsageLog) {
+    persistUsageLogForPostRequest(options, response)
+  } else if (method === "POST" && options.skipUsageLog) {
+    logSkippedUsageLog(options)
   }
 
   return response

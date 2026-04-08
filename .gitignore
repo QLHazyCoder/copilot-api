@@ -19,3 +19,6 @@ dist/
 /docs/**/*.md
 /docs/**/*.json
 /.github/**/*.md
+
+# local temp
+.tmp-run-quota/

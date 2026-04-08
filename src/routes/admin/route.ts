@@ -13,10 +13,13 @@ import {
 import {
   getConfig,
   getReasoningEffortForModel,
+  getUsageLogCountMode,
   isValidReasoningEffort,
+  isValidUsageLogCountMode,
   saveConfig,
   type ModelCardMetadata,
   type ReasoningEffort,
+  type UsageLogCountMode,
 } from "~/lib/config"
 import { copilotTokenManager } from "~/lib/copilot-token-manager"
 import { normalizeApiKeys } from "~/lib/request-auth"
@@ -100,6 +103,7 @@ interface AdminSettingsRequestBody {
   rateLimitSeconds?: number | null
   rateLimitWait?: boolean
   usageTestIntervalMinutes?: number | null
+  usageLogCountMode?: UsageLogCountMode
   anthropicApiKey?: string | null
   clearAnthropicApiKey?: boolean
   authApiKey?: string | null
@@ -1228,6 +1232,7 @@ adminRoutes.get("/api/settings", (c) => {
     rateLimitSeconds: config.rateLimitSeconds ?? null,
     rateLimitWait: config.rateLimitWait ?? false,
     usageTestIntervalMinutes,
+    usageLogCountMode: getUsageLogCountMode(),
     hasAnthropicApiKey: Boolean(config.anthropicApiKey?.trim()),
     hasAuthApiKey: Boolean(authApiKey),
     envOverride: {
@@ -1279,11 +1284,29 @@ adminRoutes.put("/api/settings", async (c) => {
     )
   }
 
+  if (
+    body.usageLogCountMode !== undefined
+    && !isValidUsageLogCountMode(body.usageLogCountMode)
+  ) {
+    return c.json(
+      {
+        error: {
+          message:
+            '"usageLogCountMode" must be either "request" or "conversation"',
+          type: "validation_error",
+        },
+      },
+      400,
+    )
+  }
+
   const anthropicApiKey = resolveAnthropicApiKey(
     body,
     config.anthropicApiKey?.trim() || undefined,
   )
   const authApiKey = resolveAuthApiKey(body, getCurrentAuthApiKey(config))
+
+  const usageLogCountMode = body.usageLogCountMode ?? getUsageLogCountMode()
 
   await saveConfig({
     ...config,
@@ -1295,6 +1318,7 @@ adminRoutes.put("/api/settings", async (c) => {
     rateLimitSeconds,
     rateLimitWait,
     usageTestIntervalMinutes,
+    usageLogCountMode,
     anthropicApiKey,
   })
 
@@ -1306,6 +1330,7 @@ adminRoutes.put("/api/settings", async (c) => {
       rateLimitSeconds: rateLimitSeconds ?? null,
       rateLimitWait,
       usageTestIntervalMinutes: usageTestIntervalMinutes ?? null,
+      usageLogCountMode,
       hasAnthropicApiKey: Boolean(anthropicApiKey),
       hasAuthApiKey: Boolean(authApiKey),
     },

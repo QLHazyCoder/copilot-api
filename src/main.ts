@@ -14,6 +14,7 @@ import { cacheModels, cacheVSCodeVersion } from "./lib/utils"
 // Configuration from environment variables
 const PORT = Number.parseInt(process.env.PORT || "4141", 10)
 const VERBOSE = process.env.VERBOSE === "true" || process.env.DEBUG === "true"
+const IS_DEVELOPMENT = process.env.NODE_ENV !== "production"
 const RATE_LIMIT =
   process.env.RATE_LIMIT ?
     Number.parseInt(process.env.RATE_LIMIT, 10)
@@ -30,6 +31,7 @@ async function main(): Promise<void> {
     initProxyFromEnv()
   }
 
+  state.isDevelopment = IS_DEVELOPMENT
   state.verbose = VERBOSE
   if (VERBOSE) {
     consola.level = 5

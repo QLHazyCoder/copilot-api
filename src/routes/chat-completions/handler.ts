@@ -6,6 +6,7 @@ import { streamSSE, type SSEMessage } from "hono/streaming"
 import { getMappedModel } from "~/lib/config"
 import { createHandlerLogger } from "~/lib/logger"
 import { checkRateLimit } from "~/lib/rate-limit"
+import { resolveConversationIdFromHeaders } from "~/lib/session"
 import { state } from "~/lib/state"
 import { getTokenCount } from "~/lib/tokenizer"
 import { isNullish } from "~/lib/utils"
@@ -51,6 +52,17 @@ export async function handleCompletion(c: Context) {
   logger.debug("Request payload:", JSON.stringify(payload).slice(-400))
 
   payload = applyModelMappingAndReasoning(payload)
+  const conversationResolution = resolveConversationIdFromHeaders(c)
+  const sessionId = conversationResolution.conversationId
+  if (state.isDevelopment) {
+    logger.info("Resolved conversation context for Chat request:", {
+      source: conversationResolution.source,
+      rawValue: conversationResolution.rawValue ?? null,
+      conversationId: sessionId ?? null,
+      xInteractionId: c.req.header("x-interaction-id") ?? null,
+      xSessionId: c.req.header("x-session-id") ?? null,
+    })
+  }
 
   const selectedModel = state.models?.data.find(
     (model) => model.id === payload.model,
@@ -59,16 +71,17 @@ export async function handleCompletion(c: Context) {
   await logTokenCountIfPossible(payload, selectedModel)
   payload = applyDefaultMaxTokens(payload, selectedModel)
 
-  const fallbackResponse = await resolveFallbackResponse(
+  const fallbackResponse = await resolveFallbackResponse({
     c,
     payload,
     selectedModel,
-  )
+    sessionId,
+  })
   if (fallbackResponse) {
     return fallbackResponse
   }
 
-  return await handleNativeChatCompletion(c, payload)
+  return await handleNativeChatCompletion(c, payload, sessionId)
 }
 
 const applyModelMappingAndReasoning = (
@@ -116,11 +129,17 @@ const applyDefaultMaxTokens = (
   return nextPayload
 }
 
-const resolveFallbackResponse = async (
-  c: Context,
-  payload: ChatCompletionsPayload,
-  selectedModel: SelectedModel | undefined,
-): Promise<Response | undefined> => {
+const resolveFallbackResponse = async ({
+  c,
+  payload,
+  selectedModel,
+  sessionId,
+}: {
+  c: Context
+  payload: ChatCompletionsPayload
+  selectedModel: SelectedModel | undefined
+  sessionId: string | undefined
+}): Promise<Response | undefined> => {
   if (!selectedModel) {
     return undefined
   }
@@ -131,11 +150,11 @@ const resolveFallbackResponse = async (
 
   if (!fallbackCapabilities.supportsChatCompletions) {
     if (fallbackCapabilities.supportsMessages) {
-      return await handleMessagesFallback(c, payload)
+      return await handleMessagesFallback(c, payload, sessionId)
     }
 
     if (fallbackCapabilities.supportsResponses) {
-      return await handleResponsesFallback(c, payload)
+      return await handleResponsesFallback(c, payload, sessionId)
     }
 
     if (fallbackCapabilities.hasEndpointMetadata) {
@@ -158,8 +177,9 @@ const resolveFallbackResponse = async (
 const handleNativeChatCompletion = async (
   c: Context,
   payload: ChatCompletionsPayload,
+  sessionId: string | undefined,
 ) => {
-  const response = await createChatCompletions(payload)
+  const response = await createChatCompletions(payload, { sessionId })
 
   if (isNonStreaming(response)) {
     response.created = getEpochSec()
@@ -187,6 +207,7 @@ const isAsyncIterable = <T>(value: unknown): value is AsyncIterable<T> =>
 const handleResponsesFallback = async (
   c: Context,
   payload: ChatCompletionsPayload,
+  sessionId: string | undefined,
 ) => {
   const responsesPayload = translateChatToResponsesPayload(payload)
   const { vision, initiator } = getResponsesRequestOptions(responsesPayload)
@@ -194,6 +215,7 @@ const handleResponsesFallback = async (
   const response = await createResponses(responsesPayload, {
     vision,
     initiator,
+    sessionId,
   })
 
   if (payload.stream && isAsyncIterable(response)) {
@@ -242,9 +264,13 @@ const handleResponsesFallback = async (
 const handleMessagesFallback = async (
   c: Context,
   payload: ChatCompletionsPayload,
+  sessionId: string | undefined,
 ) => {
   const anthropicPayload = translateChatToAnthropicPayload(payload)
-  const response = await createMessages(anthropicPayload)
+  const response = await createMessages(anthropicPayload, {
+    sessionId,
+    subagentMarker: null,
+  })
 
   if (payload.stream && isAsyncIterable(response)) {
     logger.debug("Streaming response via Messages fallback")

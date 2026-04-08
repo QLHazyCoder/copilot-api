@@ -5,6 +5,7 @@ export interface State {
   copilotToken?: string
 
   accountType: string
+  isDevelopment: boolean
   models?: ModelsResponse
   vsCodeVersion?: string
 
@@ -19,6 +20,7 @@ export interface State {
 
 export const state: State = {
   accountType: "individual",
+  isDevelopment: false,
   rateLimitWait: false,
   showToken: false,
   verbose: false,
