@@ -213,6 +213,7 @@ docker run -d \
 - 可编辑全局限流与相关配置项（环境变量仍保持更高优先级）。
 - 可在页面中配置 `anthropicApiKey`，用于 Claude `/v1/messages/count_tokens` 的官方准确计数。
 - 包含 Usage 测试间隔等管理配置。
+- 可一键清理当前活跃账号在本地保存的 Usage 日志列表。历史月份日志也会在每月 1 号后首次写入新日志时自动清理。
 
 ![编辑设置](docs/images/编辑设置.png)
 

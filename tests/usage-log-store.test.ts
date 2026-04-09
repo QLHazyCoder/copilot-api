@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 
 import {
   appendUsageRequestLog,
+  clearAllUsageLogs,
+  clearUsageLogs,
   listUsageLogs,
   updateRequestUsageLogSummary,
 } from "../src/lib/usage-log-store"
@@ -250,5 +252,87 @@ describe("updateRequestUsageLogSummary quota delta", () => {
 
     result = listUsageLogs({ accountId, source: "request", limit: 10 })
     expect(result.logs[0]?.quotaDelta).toBe(5)
+  })
+})
+
+describe("clearUsageLogs", () => {
+  test("clears only the selected account's local usage records", () => {
+    const accountId = `clear-account-${crypto.randomUUID()}`
+    const otherAccountId = `other-account-${crypto.randomUUID()}`
+
+    appendUsageRequestLog({
+      accountId,
+      endpoint: "/responses",
+      responseType: "streaming",
+      statusCode: 200,
+      model: "gpt-5.4",
+      multiplier: 3,
+      delta: 3,
+      countMode: "request",
+    })
+    appendUsageRequestLog({
+      accountId: otherAccountId,
+      endpoint: "/responses",
+      responseType: "streaming",
+      statusCode: 200,
+      model: "gpt-5.4",
+      multiplier: 3,
+      delta: 3,
+      countMode: "request",
+    })
+
+    const deletedCount = clearUsageLogs(accountId)
+
+    expect(deletedCount).toBe(1)
+    expect(
+      listUsageLogs({ accountId, source: "request", limit: 10 }).logs,
+    ).toHaveLength(0)
+    expect(
+      listUsageLogs({ accountId: otherAccountId, source: "request", limit: 10 })
+        .logs,
+    ).toHaveLength(1)
+  })
+
+  test("clears all accounts' local usage records", () => {
+    const firstAccountId = `clear-all-account-${crypto.randomUUID()}`
+    const secondAccountId = `clear-all-account-${crypto.randomUUID()}`
+
+    clearAllUsageLogs()
+
+    appendUsageRequestLog({
+      accountId: firstAccountId,
+      endpoint: "/responses",
+      responseType: "streaming",
+      statusCode: 200,
+      model: "gpt-5.4",
+      multiplier: 3,
+      delta: 3,
+      countMode: "request",
+    })
+    appendUsageRequestLog({
+      accountId: secondAccountId,
+      endpoint: "/responses",
+      responseType: "streaming",
+      statusCode: 200,
+      model: "gpt-5.4",
+      multiplier: 3,
+      delta: 3,
+      countMode: "request",
+    })
+
+    const deletedCount = clearAllUsageLogs()
+
+    expect(deletedCount).toBe(2)
+    expect(
+      listUsageLogs({ accountId: firstAccountId, source: "request", limit: 10 })
+        .logs,
+    ).toHaveLength(0)
+    expect(
+      listUsageLogs({
+        accountId: secondAccountId,
+        source: "request",
+        limit: 10,
+      }).logs,
+    ).toHaveLength(0)
   })
 })

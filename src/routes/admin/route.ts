@@ -25,6 +25,8 @@ import { copilotTokenManager } from "~/lib/copilot-token-manager"
 import { normalizeApiKeys } from "~/lib/request-auth"
 import { state } from "~/lib/state"
 import {
+  clearAllUsageLogs,
+  clearUsageLogs,
   listUsageLogEndpoints,
   listUsageLogs,
   type UsageLogCursor,
@@ -1006,6 +1008,26 @@ adminRoutes.get("/api/usage-logs", (c) => {
       endpoint,
       endpoints,
     },
+  })
+})
+
+adminRoutes.post("/api/usage-logs/clear", (c) => {
+  const activeAccountId = getConfig().activeAccountId ?? null
+  const deletedCount = clearUsageLogs(activeAccountId)
+
+  return c.json({
+    success: true,
+    deletedCount,
+    activeAccountId,
+  })
+})
+
+adminRoutes.post("/api/usage-logs/clear-all", (c) => {
+  const deletedCount = clearAllUsageLogs()
+
+  return c.json({
+    success: true,
+    deletedCount,
   })
 })
 

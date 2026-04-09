@@ -840,3 +840,22 @@ export function listUsageLogEndpoints(
     .map((row) => getSafeUsageLogEndpoint(row.endpoint))
     .filter((endpoint): endpoint is string => endpoint !== null)
 }
+
+export function clearUsageLogs(accountId?: string | null): number {
+  const db = getUsageLogDb()
+  const safeAccountId = getSafeAccountId(accountId)
+  const result = db
+    .query("DELETE FROM usage_logs WHERE account_id IS ?")
+    .run(safeAccountId) as { changes: number }
+
+  return typeof result.changes === "number" ? result.changes : 0
+}
+
+export function clearAllUsageLogs(): number {
+  const db = getUsageLogDb()
+  const result = db.query("DELETE FROM usage_logs").run() as {
+    changes: number
+  }
+
+  return typeof result.changes === "number" ? result.changes : 0
+}

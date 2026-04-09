@@ -47,6 +47,7 @@ export const adminScript = `<script>
     let isSavingAccountOrder = false;
     let settingsLoadedState = null;
     let confirmActionResolve = null;
+    let toastTimer = null;
 
     function normalizeLocale(locale) {
       if (!locale || typeof locale !== 'string') return null;
@@ -228,6 +229,31 @@ export const adminScript = `<script>
       return new Promise(function (resolve) {
         confirmActionResolve = resolve;
       });
+    }
+
+    function showToast(message, tone) {
+      const toast = document.getElementById('toastNotification');
+      if (!toast) {
+        return;
+      }
+
+      if (toastTimer) {
+        clearTimeout(toastTimer);
+        toastTimer = null;
+      }
+
+      toast.textContent = message;
+      toast.classList.remove('success', 'error', 'active');
+      toast.classList.add(tone === 'error' ? 'error' : 'success');
+
+      requestAnimationFrame(function () {
+        toast.classList.add('active');
+      });
+
+      toastTimer = setTimeout(function () {
+        toast.classList.remove('active');
+        toastTimer = null;
+      }, 2200);
     }
 
     function normalizePercent(value) {
@@ -602,6 +628,80 @@ export const adminScript = `<script>
         await fetchSettings();
       } catch (_error) {
         alert(t('settings.failedSave'));
+      } finally {
+        clearButton.disabled = false;
+      }
+    }
+
+    async function clearUsageLogs() {
+      const confirmed = await openConfirmActionModal({
+        title: t('settings.clearUsageLogsConfirmTitle'),
+        message: t('settings.clearUsageLogsConfirmMessage'),
+        confirmText: t('settings.clearUsageLogs'),
+        tone: 'danger'
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      const clearButton = document.getElementById('clearUsageLogsBtn');
+      clearButton.disabled = true;
+
+      try {
+        const res = await fetch(API_BASE + '/usage-logs/clear', {
+          method: 'POST'
+        });
+        const data = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          alert(data.error?.message || t('settings.clearUsageLogsFailed'));
+          return;
+        }
+
+        resetUsageLogPagination();
+        showToast(t('settings.clearUsageLogsSuccess', {
+          count: data.deletedCount ?? 0
+        }), 'success');
+        void fetchUsage(true);
+      } catch (_error) {
+        alert(t('settings.clearUsageLogsFailed'));
+      } finally {
+        clearButton.disabled = false;
+      }
+    }
+
+    async function clearAllUsageLogs() {
+      const confirmed = await openConfirmActionModal({
+        title: t('settings.clearAllUsageLogsConfirmTitle'),
+        message: t('settings.clearAllUsageLogsConfirmMessage'),
+        confirmText: t('settings.clearAllUsageLogs'),
+        tone: 'danger'
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      const clearButton = document.getElementById('clearAllUsageLogsBtn');
+      clearButton.disabled = true;
+
+      try {
+        const res = await fetch(API_BASE + '/usage-logs/clear-all', {
+          method: 'POST'
+        });
+        const data = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          alert(data.error?.message || t('settings.clearUsageLogsFailed'));
+          return;
+        }
+
+        resetUsageLogPagination();
+        showToast(t('settings.clearAllUsageLogsSuccess', {
+          count: data.deletedCount ?? 0
+        }), 'success');
+        void fetchUsage(true);
+      } catch (_error) {
+        alert(t('settings.clearUsageLogsFailed'));
       } finally {
         clearButton.disabled = false;
       }
@@ -2114,7 +2214,6 @@ export const adminScript = `<script>
       html += '<div class="usage-log-card">';
 
       if (usageLogs.length === 0) {
-        html += '<div class="usage-log-toolbar">' + endpointHeaderFilter + '</div>';
         html += '<div class="empty-state">' + escapeHtml(logsErrorMessage || t('usage.logEmpty')) + '</div>';
       } else {
         html += '<div class="usage-log-table-wrap"><table class="usage-log-table">'
@@ -2213,17 +2312,16 @@ export const adminScript = `<script>
         }).join('');
 
         html += '</tbody></table></div>';
+        const isPrevDisabled = isFetchingUsageLogs || usageLogPageIndex <= 1;
+        const isNextDisabled = isFetchingUsageLogs || !usageLogNextCursor;
+        const pageSizeSelector = getUsageLogPageSizeSelector();
+        html += '<div class="usage-log-pagination">'
+          + pageSizeSelector
+          + '<button class="btn btn-sm usage-log-page-btn" id="usageLogPrevPageBtn"' + (isPrevDisabled ? ' disabled' : '') + '>' + escapeHtml(t('usage.logPagePrev')) + '</button>'
+          + '<span class="usage-log-page-info">' + escapeHtml(t('usage.logPageIndicator', { page: usageLogPageIndex })) + '</span>'
+          + '<button class="btn btn-sm usage-log-page-btn" id="usageLogNextPageBtn"' + (isNextDisabled ? ' disabled' : '') + '>' + escapeHtml(t('usage.logPageNext')) + '</button>'
+          + '</div>';
       }
-
-      const isPrevDisabled = isFetchingUsageLogs || usageLogPageIndex <= 1;
-      const isNextDisabled = isFetchingUsageLogs || !usageLogNextCursor;
-      const pageSizeSelector = getUsageLogPageSizeSelector();
-      html += '<div class="usage-log-pagination">'
-        + pageSizeSelector
-        + '<button class="btn btn-sm usage-log-page-btn" id="usageLogPrevPageBtn"' + (isPrevDisabled ? ' disabled' : '') + '>' + escapeHtml(t('usage.logPagePrev')) + '</button>'
-        + '<span class="usage-log-page-info">' + escapeHtml(t('usage.logPageIndicator', { page: usageLogPageIndex })) + '</span>'
-        + '<button class="btn btn-sm usage-log-page-btn" id="usageLogNextPageBtn"' + (isNextDisabled ? ' disabled' : '') + '>' + escapeHtml(t('usage.logPageNext')) + '</button>'
-        + '</div>';
 
       html += '</div>';
 
@@ -2555,6 +2653,12 @@ export const adminScript = `<script>
     });
     document.getElementById('clearGatewayApiKeyBtn').addEventListener('click', function () {
       void clearGatewayApiKey();
+    });
+    document.getElementById('clearUsageLogsBtn').addEventListener('click', function () {
+      void clearUsageLogs();
+    });
+    document.getElementById('clearAllUsageLogsBtn').addEventListener('click', function () {
+      void clearAllUsageLogs();
     });
 
     document.getElementById('addMappingBtn').addEventListener('click', function () {

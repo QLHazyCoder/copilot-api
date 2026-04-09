@@ -490,7 +490,7 @@ export const adminHtml = `<!DOCTYPE html>
     }
     .usage-summary-card .usage-info-row { height: 100%; min-height: 0; padding: 0; font-size: 0.9rem; align-items: center; }
     .usage-summary-card .usage-info-label { font-size: 0.9rem; }
-    .usage-summary-card .usage-summary-input { font-size: 0.9rem; }
+    .usage-summary-card .usage-summary-input { font-size: 0.85rem; }
     .usage-info-row { display: flex; justify-content: space-between; padding: 0.25rem 0; gap: 0.75rem; }
     .usage-info-label { color: var(--text-secondary); }
     .usage-info-control { display: inline-flex; align-items: center; margin-left: auto; }
@@ -737,6 +737,13 @@ export const adminHtml = `<!DOCTYPE html>
     .settings-title-row .settings-section-title {
       margin-bottom: 0;
     }
+    .settings-title-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
     .settings-status-badge {
       display: inline-flex;
       align-items: center;
@@ -878,6 +885,38 @@ export const adminHtml = `<!DOCTYPE html>
       background: rgba(20, 33, 46, 0.52);
       border-color: rgba(63, 96, 131, 0.62);
       font-size: 0.74rem;
+    }
+    .toast-notification {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      min-width: 220px;
+      max-width: min(360px, calc(100vw - 36px));
+      padding: 0.78rem 0.9rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(63, 96, 131, 0.72);
+      background: rgba(12, 21, 31, 0.94);
+      color: var(--text-primary);
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.34);
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      z-index: 1200;
+    }
+    .toast-notification.active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .toast-notification.success {
+      border-color: rgba(31, 157, 139, 0.62);
+      background: rgba(11, 37, 33, 0.96);
+      color: #b5efe7;
+    }
+    .toast-notification.error {
+      border-color: rgba(211, 93, 102, 0.62);
+      background: rgba(45, 18, 24, 0.96);
+      color: #ffd0d4;
     }
     .settings-rate-limit-section .settings-notice {
       margin-top: 0;
@@ -1287,6 +1326,16 @@ export const adminHtml = `<!DOCTYPE html>
             </div>
             <p class="hint" data-i18n="settings.gatewayApiKeyHint">Suitable for scenarios without gpt/new-style relay projects, helping avoid unauthorized calls or abuse after public exposure.</p>
           </div>
+          <div class="settings-section">
+            <div class="settings-title-row">
+              <div class="settings-section-title" data-i18n="settings.usageLogMaintenance">Usage Log Maintenance</div>
+              <div class="settings-title-actions">
+                <button class="btn settings-inline-btn btn-sm" id="clearUsageLogsBtn" type="button" data-i18n="settings.clearUsageLogs">Clear current account logs</button>
+                <button class="btn btn-danger settings-inline-btn btn-sm" id="clearAllUsageLogsBtn" type="button" data-i18n="settings.clearAllUsageLogs">Clear all account logs</button>
+              </div>
+            </div>
+            <p class="hint" data-i18n="settings.usageLogCleanupHint">These buttons clear the local Usage list for the current active account or all accounts. Historical month data is also cleaned automatically on the first new write after the 1st of each month.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -1400,6 +1449,7 @@ export const adminHtml = `<!DOCTYPE html>
       </div>
     </div>
   </div>
+  <div class="toast-notification" id="toastNotification" aria-live="polite"></div>
   <div class="modal-overlay" id="authModal">
     <div class="modal">
       <h2 class="modal-title" data-i18n="auth.addAccount">Add GitHub Account</h2>

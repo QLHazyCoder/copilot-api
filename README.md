@@ -213,6 +213,7 @@ The admin panel includes five tabs: `Accounts`, `Models`, `Usage`, `Model Mappin
 - Edit global rate-limit and related admin settings (env vars still take precedence).
 - Configure `anthropicApiKey` in the page for official Claude `/v1/messages/count_tokens` accuracy.
 - Includes Usage test interval configuration.
+- Includes a button to clear the current active account's local Usage log list. Historical month logs are also cleaned automatically on the first new write after the 1st of each month.
 
 ![Settings page](docs/images/编辑设置.png)
 

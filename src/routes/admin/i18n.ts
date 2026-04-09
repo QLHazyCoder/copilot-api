@@ -123,6 +123,22 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
       "This will remove the saved gateway API key immediately. Continue?",
     "settings.gatewayApiKeyStatusSet": "Set",
     "settings.gatewayApiKeyStatusNotSet": "Not set",
+    "settings.usageLogMaintenance": "Usage Log Maintenance",
+    "settings.usageLogCleanupHint":
+      "These buttons clear the local Usage list for the current active account or all accounts. Historical month data is also cleaned automatically on the first new write after the 1st of each month.",
+    "settings.clearUsageLogs": "Clear current account logs",
+    "settings.clearUsageLogsConfirmTitle": "Clear current account usage logs",
+    "settings.clearUsageLogsConfirmMessage":
+      "This will permanently clear the current active account's local usage log list. Continue?",
+    "settings.clearUsageLogsSuccess":
+      "Cleared {count} local usage log record(s) for the current active account.",
+    "settings.clearAllUsageLogs": "Clear all account logs",
+    "settings.clearAllUsageLogsConfirmTitle": "Clear all account usage logs",
+    "settings.clearAllUsageLogsConfirmMessage":
+      "This will permanently clear the local usage log list for all accounts. Continue?",
+    "settings.clearAllUsageLogsSuccess":
+      "Cleared {count} local usage log record(s) across all accounts.",
+    "settings.clearUsageLogsFailed": "Failed to clear usage logs",
     "settings.loadingSettings": "Loading settings...",
     "settings.noticeProcessWide": "This rate limit is process-wide.",
     "settings.noticeEnvOverride":
@@ -359,6 +375,22 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
       "将立即删除当前保存的网关 key，是否继续？",
     "settings.gatewayApiKeyStatusSet": "已设置",
     "settings.gatewayApiKeyStatusNotSet": "未设置",
+    "settings.usageLogMaintenance": "用量记录维护",
+    "settings.usageLogCleanupHint":
+      "这两个按钮分别清理当前活跃账号或全部账号在 Usage 列表中的本地记录。历史月份数据也会在每月 1 号后首次写入新日志时自动清理。",
+    "settings.clearUsageLogs": "清理当前账户记录",
+    "settings.clearUsageLogsConfirmTitle": "清理当前账户用量记录",
+    "settings.clearUsageLogsConfirmMessage":
+      "这会永久清空当前活跃账号在本地保存的用量记录列表，是否继续？",
+    "settings.clearUsageLogsSuccess":
+      "已清理当前活跃账号的 {count} 条本地用量记录。",
+    "settings.clearAllUsageLogs": "清理全部账户记录",
+    "settings.clearAllUsageLogsConfirmTitle": "清理全部账户用量记录",
+    "settings.clearAllUsageLogsConfirmMessage":
+      "这会永久清空所有账号在本地保存的用量记录列表，是否继续？",
+    "settings.clearAllUsageLogsSuccess":
+      "已清理全部账号的 {count} 条本地用量记录。",
+    "settings.clearUsageLogsFailed": "清理用量记录失败",
     "settings.loadingSettings": "正在加载设置...",
     "settings.noticeProcessWide": "该限流作用于整个进程。",
     "settings.noticeEnvOverride": "当前被环境变量覆盖：{names}。",
