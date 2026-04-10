@@ -396,7 +396,13 @@ export const adminHtml = `<!DOCTYPE html>
       background: rgba(11, 19, 28, 0.72);
     }
     .model-top { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
-    .model-name { flex: 1; min-width: 0; font-weight: 600; font-size: 0.94rem; color: var(--info); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .model-name { flex: 1; min-width: 0; font-weight: 600; font-size: 0.94rem; color: var(--info); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; transition: color 0.15s ease; }
+    .model-name:hover { color: #84c0ff; }
+    .model-name:focus-visible {
+      outline: 1px solid rgba(90, 167, 255, 0.78);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
     .model-reasoning-wrap {
       display: inline-flex;
       align-items: center;

@@ -256,6 +256,48 @@ export const adminScript = `<script>
       }, 2200);
     }
 
+    async function copyTextToClipboard(text) {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+          await navigator.clipboard.writeText(text);
+          return;
+        } catch (_error) {
+          // Fall back to execCommand for environments where clipboard access is blocked.
+        }
+      }
+
+      const textarea = document.createElement('textarea');
+      const previousActiveElement =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.setAttribute('aria-hidden', 'true');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-1000px';
+      textarea.style.left = '-1000px';
+
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+
+      let copied = false;
+      try {
+        copied = document.execCommand('copy');
+      } catch (_error) {
+        copied = false;
+      } finally {
+        document.body.removeChild(textarea);
+        if (previousActiveElement) {
+          previousActiveElement.focus();
+        }
+      }
+
+      if (!copied) {
+        throw new Error('Copy failed');
+      }
+    }
+
     function normalizePercent(value) {
       if (!Number.isFinite(value)) return 0;
       return Math.max(0, Math.min(100, value));
@@ -1183,6 +1225,15 @@ export const adminScript = `<script>
         .replaceAll("'", '&#39;');
     }
 
+    async function copyModelName(modelId) {
+      try {
+        await copyTextToClipboard(modelId);
+        showToast(t('models.copyNameSuccess'), 'success');
+      } catch (_error) {
+        showToast(t('models.copyNameFailed'), 'error');
+      }
+    }
+
     function loadCollapsedProviders() {
       try {
         const value = localStorage.getItem(MODELS_COLLAPSED_STORAGE_KEY);
@@ -1433,6 +1484,8 @@ export const adminScript = `<script>
       const safeModelId = escapeHtml(model.id);
       const safeContextWindowText = escapeHtml(contextWindowText);
       const safeFeaturesText = escapeHtml(featuresText);
+      const safeCopyAriaLabel = escapeHtml(t('models.copyNameAriaLabel', { model: model.id }));
+      const safeModelTitle = escapeHtml(model.id + ' - ' + t('models.copyNameHint'));
       const visibilityActionText = isHiddenModel ? t('models.show') : t('models.hide');
       const visibilityActionClass = isHiddenModel ? 'model-visibility-action-btn show' : 'model-visibility-action-btn';
       const showReasoningSelector = modelSupportsReasoningEffort(model.id);
@@ -1457,7 +1510,7 @@ export const adminScript = `<script>
 
       return '<div class="model-card' + (isHiddenModel ? ' hidden-model' : '') + '">'
         + '<div class="model-top">'
-        + '<div class="model-name" title="' + safeModelId + '">' + safeModelId + '</div>'
+        + '<div class="model-name" role="button" tabindex="0" data-model-id="' + encodedModelId + '" title="' + safeModelTitle + '" aria-label="' + safeCopyAriaLabel + '">' + safeModelId + '</div>'
         + '<div class="model-right">'
         + visibilityActionMarkup
         + (isPremium ? '<span class="model-premium-badge">' + t('models.premium') + '</span>' : '')
@@ -1722,6 +1775,31 @@ export const adminScript = `<script>
       container.querySelectorAll('.model-multiplier').forEach(function (multiplierEl) {
         multiplierEl.addEventListener('dblclick', function () {
           startMultiplierEdit(multiplierEl);
+        });
+      });
+
+      container.querySelectorAll('.model-name').forEach(function (nameEl) {
+        nameEl.addEventListener('click', function () {
+          const encodedModelId = nameEl.dataset.modelId || '';
+          if (!encodedModelId) {
+            return;
+          }
+
+          void copyModelName(decodeURIComponent(encodedModelId));
+        });
+
+        nameEl.addEventListener('keydown', function (event) {
+          if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') {
+            return;
+          }
+
+          event.preventDefault();
+          const encodedModelId = nameEl.dataset.modelId || '';
+          if (!encodedModelId) {
+            return;
+          }
+
+          void copyModelName(decodeURIComponent(encodedModelId));
         });
       });
 
