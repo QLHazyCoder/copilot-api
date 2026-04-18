@@ -3,8 +3,11 @@ import type { Context } from "hono"
 import consola from "consola"
 import { streamSSE, type SSEMessage } from "hono/streaming"
 
-import { getMappedModel } from "~/lib/config"
 import { createHandlerLogger } from "~/lib/logger"
+import {
+  buildUnknownModelMessage,
+  resolveModelRequest,
+} from "~/lib/model-routing"
 import { checkRateLimit } from "~/lib/rate-limit"
 import { resolveConversationIdFromHeaders } from "~/lib/session"
 import { state } from "~/lib/state"
@@ -35,7 +38,6 @@ import {
 } from "./messages-fallback"
 import {
   createResponsesStreamToChatState,
-  getChatFallbackCapabilities,
   translateChatToResponsesPayload,
   translateResponsesStreamEventToChatChunks,
   translateResponsesToChatCompletion,
@@ -51,7 +53,11 @@ export async function handleCompletion(c: Context) {
   consola.info(`[Request] model: ${payload.model}`)
   logger.debug("Request payload:", JSON.stringify(payload).slice(-400))
 
-  payload = applyModelMappingAndReasoning(payload)
+  const modelResolution = await resolveModelRequest(payload.model)
+  payload = {
+    ...payload,
+    model: modelResolution.routedModel,
+  }
   const conversationResolution = resolveConversationIdFromHeaders(c)
   const sessionId = conversationResolution.conversationId
   if (state.isDevelopment) {
@@ -64,9 +70,20 @@ export async function handleCompletion(c: Context) {
     })
   }
 
-  const selectedModel = state.models?.data.find(
-    (model) => model.id === payload.model,
-  )
+  const selectedModel = modelResolution.selectedModel
+
+  if (!selectedModel) {
+    return c.json(
+      {
+        error: {
+          message: buildUnknownModelMessage(modelResolution),
+          type: "invalid_request_error",
+          code: "model_not_supported",
+        },
+      },
+      400,
+    )
+  }
 
   await logTokenCountIfPossible(payload, selectedModel)
   payload = applyDefaultMaxTokens(payload, selectedModel)
@@ -74,7 +91,7 @@ export async function handleCompletion(c: Context) {
   const fallbackResponse = await resolveFallbackResponse({
     c,
     payload,
-    selectedModel,
+    capabilities: modelResolution.capabilities,
     sessionId,
   })
   if (fallbackResponse) {
@@ -82,18 +99,6 @@ export async function handleCompletion(c: Context) {
   }
 
   return await handleNativeChatCompletion(c, payload, sessionId)
-}
-
-const applyModelMappingAndReasoning = (
-  payload: ChatCompletionsPayload,
-): ChatCompletionsPayload => {
-  const mappedModel = getMappedModel(payload.model)
-  const mappedPayload = {
-    ...payload,
-    model: mappedModel,
-  }
-
-  return mappedPayload
 }
 
 const logTokenCountIfPossible = async (
@@ -132,32 +137,29 @@ const applyDefaultMaxTokens = (
 const resolveFallbackResponse = async ({
   c,
   payload,
-  selectedModel,
+  capabilities,
   sessionId,
 }: {
   c: Context
   payload: ChatCompletionsPayload
-  selectedModel: SelectedModel | undefined
+  capabilities: {
+    supportsChatCompletions: boolean
+    supportsResponses: boolean
+    supportsMessages: boolean
+    hasEndpointMetadata: boolean
+  }
   sessionId: string | undefined
 }): Promise<Response | undefined> => {
-  if (!selectedModel) {
-    return undefined
-  }
-
-  const fallbackCapabilities = getChatFallbackCapabilities(
-    selectedModel.supported_endpoints,
-  )
-
-  if (!fallbackCapabilities.supportsChatCompletions) {
-    if (fallbackCapabilities.supportsMessages) {
+  if (!capabilities.supportsChatCompletions) {
+    if (capabilities.supportsMessages) {
       return await handleMessagesFallback(c, payload, sessionId)
     }
 
-    if (fallbackCapabilities.supportsResponses) {
+    if (capabilities.supportsResponses) {
       return await handleResponsesFallback(c, payload, sessionId)
     }
 
-    if (fallbackCapabilities.hasEndpointMetadata) {
+    if (capabilities.hasEndpointMetadata) {
       return c.json(
         {
           error: {

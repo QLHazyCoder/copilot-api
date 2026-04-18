@@ -3,8 +3,12 @@ import type { Context } from "hono"
 import consola from "consola"
 import { streamSSE } from "hono/streaming"
 
-import { getMappedModel, getSmallModel } from "~/lib/config"
+import { getSmallModel } from "~/lib/config"
 import { createHandlerLogger } from "~/lib/logger"
+import {
+  buildUnknownModelMessage,
+  resolveModelRequest,
+} from "~/lib/model-routing"
 import { checkRateLimit } from "~/lib/rate-limit"
 import { resolveConversationIdFromAnthropicPayload } from "~/lib/session"
 import { state } from "~/lib/state"
@@ -88,7 +92,21 @@ export async function handleCompletion(c: Context) {
     anthropicPayload.model = getSmallModel()
   }
 
-  anthropicPayload.model = getMappedModel(anthropicPayload.model)
+  const modelResolution = await resolveModelRequest(anthropicPayload.model)
+  anthropicPayload.model = modelResolution.routedModel
+
+  if (!modelResolution.selectedModel) {
+    return c.json(
+      {
+        error: {
+          message: buildUnknownModelMessage(modelResolution),
+          type: "invalid_request_error",
+          code: "model_not_supported",
+        },
+      },
+      400,
+    )
+  }
 
   const initiator = inferAnthropicInitiatorFromLastMessage(anthropicPayload)
 
@@ -99,7 +117,7 @@ export async function handleCompletion(c: Context) {
   mergeToolResultForClaude(anthropicPayload)
   sanitizeOrphanToolResults(anthropicPayload)
 
-  if (shouldUseMessagesApi(anthropicPayload.model)) {
+  if (modelResolution.capabilities.supportsMessages) {
     return await handleWithMessagesApi(c, anthropicPayload, {
       anthropicBetaHeader: anthropicBeta,
       initiatorOverride: initiator,
@@ -108,7 +126,7 @@ export async function handleCompletion(c: Context) {
     })
   }
 
-  if (shouldUseResponsesApi(anthropicPayload.model)) {
+  if (modelResolution.capabilities.supportsResponses) {
     return await handleWithResponsesApi(c, {
       anthropicPayload,
       initiatorOverride: initiator,
@@ -128,9 +146,6 @@ export async function handleCompletion(c: Context) {
     },
   })
 }
-
-const RESPONSES_ENDPOINT = "/responses"
-const MESSAGES_ENDPOINT = "/v1/messages"
 
 export const inferAnthropicInitiatorFromLastMessage = (
   anthropicPayload: AnthropicMessagesPayload,
@@ -377,20 +392,6 @@ const handleWithMessagesApi = async (
     JSON.stringify(response).slice(-400),
   )
   return c.json(response)
-}
-
-const shouldUseResponsesApi = (modelId: string): boolean => {
-  const selectedModel = state.models?.data.find((model) => model.id === modelId)
-  return (
-    selectedModel?.supported_endpoints?.includes(RESPONSES_ENDPOINT) ?? false
-  )
-}
-
-const shouldUseMessagesApi = (modelId: string): boolean => {
-  const selectedModel = state.models?.data.find((model) => model.id === modelId)
-  return (
-    selectedModel?.supported_endpoints?.includes(MESSAGES_ENDPOINT) ?? false
-  )
 }
 
 const isNonStreaming = (

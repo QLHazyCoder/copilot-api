@@ -2,6 +2,8 @@ import { events } from "fetch-event-stream"
 
 import type { SubagentMarker } from "~/routes/messages/subagent-marker"
 
+import { normalizeResponsesPayload } from "~/lib/responses-payload"
+import { state } from "~/lib/state"
 import { copilotRequest } from "~/services/copilot-provider/create-provider"
 
 export interface ResponsesPayload {
@@ -331,6 +333,11 @@ export const createResponses = async (
   payload: ResponsesPayload,
   { vision, initiator, subagentMarker, sessionId }: ResponsesRequestOptions,
 ): Promise<CreateResponsesReturn> => {
+  const selectedModel = state.models?.data.find(
+    (model) => model.id === payload.model,
+  )
+  normalizeResponsesPayload(payload, selectedModel)
+
   // service_tier is not supported by github copilot
   payload.service_tier = null
 

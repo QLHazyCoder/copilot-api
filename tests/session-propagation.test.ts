@@ -11,6 +11,7 @@ import { geminiRoutes } from "../src/routes/gemini/route"
 import { responsesRoutes } from "../src/routes/responses/route"
 
 interface UpstreamRequestRecord {
+  body?: unknown
   headers: Record<string, string>
   pathname: string
 }
@@ -157,8 +158,20 @@ beforeEach(() => {
     const url = getRequestUrl(input)
     const pathname = new URL(url).pathname
     const headers = Object.fromEntries(new Headers(init?.headers).entries())
+    const rawBody = init?.body
+    let body: unknown
+    if (typeof rawBody === "string") {
+      try {
+        body = JSON.parse(rawBody)
+      } catch {
+        body = rawBody
+      }
+    } else {
+      body = rawBody
+    }
 
     upstreamRequests.push({
+      body,
       pathname,
       headers,
     })
@@ -297,5 +310,105 @@ describe("session propagation", () => {
     expect(upstreamRequests[0]?.headers["x-interaction-id"]).toBe(
       normalizeConversationId("gemini-thread-1"),
     )
+  })
+})
+
+describe("routing guardrails", () => {
+  test("resolves builtin model aliases before calling upstream chat", async () => {
+    setModels([createModel("gemini-3.1-pro-preview", ["/chat/completions"])])
+    const app = createTestApp()
+
+    const response = await app.request("http://localhost/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gemini-3-pro-preview",
+        messages: [{ role: "user", content: "hello" }],
+        stream: false,
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(upstreamRequests[0]?.pathname).toBe("/chat/completions")
+    expect(
+      (upstreamRequests[0]?.body as { model?: string } | undefined)?.model,
+    ).toBe("gemini-3.1-pro-preview")
+  })
+
+  test("clamps direct responses max_output_tokens to the supported minimum", async () => {
+    setModels([createModel("responses-model", ["/responses"])])
+    const app = createTestApp()
+
+    const response = await app.request("http://localhost/v1/responses", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "responses-model",
+        input: "hello",
+        max_output_tokens: 1,
+        stream: false,
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(upstreamRequests[0]?.pathname).toBe("/responses")
+    expect(
+      (upstreamRequests[0]?.body as { max_output_tokens?: number } | undefined)
+        ?.max_output_tokens,
+    ).toBe(16)
+  })
+
+  test("clamps responses fallback max_output_tokens converted from chat max_tokens", async () => {
+    setModels([createModel("fallback-responses-model", ["/responses"])])
+    const app = createTestApp()
+
+    const response = await app.request("http://localhost/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "fallback-responses-model",
+        messages: [{ role: "user", content: "hello" }],
+        max_tokens: 1,
+        stream: false,
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(upstreamRequests[0]?.pathname).toBe("/responses")
+    expect(
+      (upstreamRequests[0]?.body as { max_output_tokens?: number } | undefined)
+        ?.max_output_tokens,
+    ).toBe(16)
+  })
+
+  test("routes gemini requests through responses fallback when chat is unsupported", async () => {
+    setModels([createModel("gemini-responses-model", ["/responses"])])
+    const app = createTestApp()
+
+    const response = await app.request(
+      "http://localhost/v1beta/models/gemini-responses-model:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: "hello" }],
+            },
+          ],
+        }),
+      },
+    )
+
+    expect(response.status).toBe(200)
+    expect(upstreamRequests[0]?.pathname).toBe("/responses")
   })
 })

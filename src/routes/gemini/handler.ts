@@ -2,18 +2,44 @@ import type { Context } from "hono"
 
 import { streamSSE, type SSEMessage } from "hono/streaming"
 
-import { getMappedModel } from "~/lib/config"
+import type {
+  AnthropicResponse,
+  AnthropicStreamEventData,
+} from "~/routes/messages/anthropic-types"
+
 import { createHandlerLogger } from "~/lib/logger"
+import {
+  buildUnknownModelMessage,
+  resolveModelRequest,
+} from "~/lib/model-routing"
 import { checkRateLimit } from "~/lib/rate-limit"
 import { resolveConversationIdFromHeaders } from "~/lib/session"
 import { state } from "~/lib/state"
-import { cacheModels } from "~/lib/utils"
-import { getChatFallbackCapabilities } from "~/routes/chat-completions/responses-fallback"
+import {
+  createAnthropicStreamToChatState,
+  translateAnthropicStreamEventToChatChunks,
+  translateAnthropicToChatCompletion,
+  translateChatToAnthropicPayload,
+} from "~/routes/chat-completions/messages-fallback"
+import {
+  createResponsesStreamToChatState,
+  translateChatToResponsesPayload,
+  translateResponsesStreamEventToChatChunks,
+  translateResponsesToChatCompletion,
+} from "~/routes/chat-completions/responses-fallback"
+import { getResponsesRequestOptions } from "~/routes/responses/utils"
 import {
   createChatCompletions,
   type ChatCompletionChunk,
   type ChatCompletionResponse,
+  type ChatCompletionsPayload,
 } from "~/services/copilot/create-chat-completions"
+import { createMessages } from "~/services/copilot/create-messages"
+import {
+  createResponses,
+  type ResponsesResult,
+  type ResponseStreamEvent,
+} from "~/services/copilot/create-responses"
 
 import {
   buildChatPayloadFromGemini,
@@ -70,31 +96,14 @@ export const handleGeminiCompletion = async (c: Context) => {
     )
   }
 
-  const mappedModel = getMappedModel(parsedRequest.model)
-  const selectedModel = await resolveModel(mappedModel)
-
-  if (!selectedModel) {
+  const modelResolution = await resolveModelRequest(parsedRequest.model)
+  if (!modelResolution.selectedModel) {
     return c.json(
       {
         error: {
-          message: "Unknown model. Please switch to a supported chat model.",
+          message: buildUnknownModelMessage(modelResolution),
           type: "invalid_request_error",
-        },
-      },
-      400,
-    )
-  }
-
-  const capabilities = getChatFallbackCapabilities(
-    selectedModel.supported_endpoints,
-  )
-  if (!capabilities.supportsChatCompletions) {
-    return c.json(
-      {
-        error: {
-          message:
-            "This model does not support chat/completions. Please switch model.",
-          type: "invalid_request_error",
+          code: "model_not_supported",
         },
       },
       400,
@@ -103,19 +112,35 @@ export const handleGeminiCompletion = async (c: Context) => {
 
   const chatPayload = buildChatPayloadFromGemini(
     payload,
-    mappedModel,
+    modelResolution.routedModel,
     parsedRequest.stream,
   )
 
-  if (parsedRequest.stream) {
-    return await handleStreamingResponse(c, chatPayload, sessionId)
+  if (
+    !modelResolution.capabilities.hasEndpointMetadata
+    || modelResolution.capabilities.supportsChatCompletions
+  ) {
+    return await handleChatResponse(c, chatPayload, sessionId)
   }
 
-  const response = await createChatCompletions(chatPayload, { sessionId })
-  const geminiResponse = toGeminiNonStreamResponse(
-    response as ChatCompletionResponse,
+  if (modelResolution.capabilities.supportsMessages) {
+    return await handleMessagesFallback(c, chatPayload, sessionId)
+  }
+
+  if (modelResolution.capabilities.supportsResponses) {
+    return await handleResponsesFallback(c, chatPayload, sessionId)
+  }
+
+  return c.json(
+    {
+      error: {
+        message:
+          "This model does not support Gemini-compatible requests. Please switch model.",
+        type: "invalid_request_error",
+      },
+    },
+    400,
   )
-  return c.json(geminiResponse)
 }
 
 const parseGeminiRequestPath = (path: string): ParsedGeminiRequest | null => {
@@ -135,17 +160,112 @@ const parseGeminiRequestPath = (path: string): ParsedGeminiRequest | null => {
   }
 }
 
-const resolveModel = async (model: string) => {
-  if (!state.models) {
-    await cacheModels()
+const handleChatResponse = async (
+  c: Context,
+  chatPayload: ChatCompletionsPayload,
+  sessionId: string | undefined,
+) => {
+  if (chatPayload.stream) {
+    return await handleStreamingChatResponse(c, chatPayload, sessionId)
   }
 
-  return state.models?.data.find((item) => item.id === model)
+  const response = await createChatCompletions(chatPayload, { sessionId })
+  const geminiResponse = toGeminiNonStreamResponse(
+    response as ChatCompletionResponse,
+  )
+  return c.json(geminiResponse)
 }
 
-const handleStreamingResponse = async (
+const handleMessagesFallback = async (
   c: Context,
-  chatPayload: Parameters<typeof createChatCompletions>[0],
+  chatPayload: ChatCompletionsPayload,
+  sessionId: string | undefined,
+) => {
+  const anthropicPayload = translateChatToAnthropicPayload(chatPayload)
+  const response = await createMessages(anthropicPayload, {
+    sessionId,
+    subagentMarker: null,
+  })
+
+  if (chatPayload.stream && isAsyncIterable(response)) {
+    return streamSSE(c, async (stream) => {
+      const streamState = createAnthropicStreamToChatState()
+
+      for await (const rawChunk of response) {
+        const data = (rawChunk as { data?: string }).data
+        if (!data) {
+          continue
+        }
+
+        const rawEvent = JSON.parse(data) as AnthropicStreamEventData
+        const chatChunks = translateAnthropicStreamEventToChatChunks(
+          rawEvent,
+          streamState,
+        )
+        await writeGeminiChatChunks(stream, chatChunks)
+
+        if (rawEvent.type === "message_stop") {
+          break
+        }
+      }
+    })
+  }
+
+  const geminiResponse = toGeminiNonStreamResponse(
+    translateAnthropicToChatCompletion(response as AnthropicResponse),
+  )
+  return c.json(geminiResponse)
+}
+
+const handleResponsesFallback = async (
+  c: Context,
+  chatPayload: ChatCompletionsPayload,
+  sessionId: string | undefined,
+) => {
+  const responsesPayload = translateChatToResponsesPayload(chatPayload)
+  const { vision, initiator } = getResponsesRequestOptions(responsesPayload)
+  const response = await createResponses(responsesPayload, {
+    vision,
+    initiator,
+    sessionId,
+  })
+
+  if (chatPayload.stream && isAsyncIterable(response)) {
+    return streamSSE(c, async (stream) => {
+      const streamState = createResponsesStreamToChatState()
+
+      for await (const rawChunk of response) {
+        const data = (rawChunk as { data?: string }).data
+        if (!data) {
+          continue
+        }
+
+        const rawEvent = JSON.parse(data) as ResponseStreamEvent
+        const chatChunks = translateResponsesStreamEventToChatChunks(
+          rawEvent,
+          streamState,
+        )
+        await writeGeminiChatChunks(stream, chatChunks)
+
+        if (
+          rawEvent.type === "response.completed"
+          || rawEvent.type === "response.incomplete"
+        ) {
+          break
+        }
+      }
+    })
+  }
+
+  const geminiResponse = toGeminiNonStreamResponse(
+    translateResponsesToChatCompletion(response as ResponsesResult),
+  )
+  return c.json(geminiResponse)
+}
+
+const handleStreamingChatResponse = async (
+  c: Context,
+  chatPayload: ChatCompletionsPayload,
   sessionId: string | undefined,
 ) => {
   const response = await createChatCompletions(chatPayload, { sessionId })
@@ -173,15 +293,26 @@ const handleStreamingResponse = async (
       }
 
       const parsedChunk = JSON.parse(data) as ChatCompletionChunk
-      const geminiChunkResponses = toGeminiStreamChunkResponses(parsedChunk)
-
-      for (const geminiChunkResponse of geminiChunkResponses) {
-        await stream.writeSSE({
-          data: JSON.stringify(geminiChunkResponse),
-        } satisfies SSEMessage)
-      }
+      await writeGeminiChatChunks(stream, [parsedChunk])
     }
   })
+}
+
+const writeGeminiChatChunks = async (
+  stream: {
+    writeSSE: (message: SSEMessage) => Promise<void>
+  },
+  chatChunks: Array<ChatCompletionChunk>,
+) => {
+  for (const chatChunk of chatChunks) {
+    const geminiChunkResponses = toGeminiStreamChunkResponses(chatChunk)
+
+    for (const geminiChunkResponse of geminiChunkResponses) {
+      await stream.writeSSE({
+        data: JSON.stringify(geminiChunkResponse),
+      } satisfies SSEMessage)
+    }
+  }
 }
 
 const isAsyncIterable = <T>(value: unknown): value is AsyncIterable<T> =>

@@ -2,8 +2,12 @@ import type { Context } from "hono"
 
 import { streamSSE } from "hono/streaming"
 
-import { getConfig, getMappedModel } from "~/lib/config"
+import { getConfig } from "~/lib/config"
 import { createHandlerLogger } from "~/lib/logger"
+import {
+  buildUnknownModelMessage,
+  resolveModelRequest,
+} from "~/lib/model-routing"
 import { checkRateLimit } from "~/lib/rate-limit"
 import { resolveConversationIdFromResponsesPayload } from "~/lib/session"
 import { state } from "~/lib/state"
@@ -19,7 +23,6 @@ import { getResponsesRequestOptions } from "./utils"
 
 const logger = createHandlerLogger("responses-handler")
 
-const RESPONSES_ENDPOINT = "/responses"
 const FILE_EDITING_TOOL_NAMES = new Set([
   "apply_patch",
   "write",
@@ -45,7 +48,8 @@ export const handleResponses = async (c: Context) => {
   const payload = await c.req.json<ResponsesPayload>()
   logger.debug("Responses request payload:", JSON.stringify(payload))
 
-  payload.model = getMappedModel(payload.model)
+  const modelResolution = await resolveModelRequest(payload.model)
+  payload.model = modelResolution.routedModel
   const conversationResolution = resolveConversationIdFromResponsesPayload(
     payload,
     c,
@@ -65,13 +69,20 @@ export const handleResponses = async (c: Context) => {
   normalizeCustomTools(payload)
   filterUnsupportedTools(payload)
 
-  const selectedModel = state.models?.data.find(
-    (model) => model.id === payload.model,
-  )
-  const supportsResponses =
-    selectedModel?.supported_endpoints?.includes(RESPONSES_ENDPOINT) ?? false
+  if (!modelResolution.selectedModel) {
+    return c.json(
+      {
+        error: {
+          message: buildUnknownModelMessage(modelResolution),
+          type: "invalid_request_error",
+          code: "model_not_supported",
+        },
+      },
+      400,
+    )
+  }
 
-  if (!supportsResponses) {
+  if (!modelResolution.capabilities.supportsResponses) {
     return c.json(
       {
         error: {
