@@ -25,6 +25,9 @@ export async function forwardError(c: Context, error: unknown) {
           message: error.message,
           type: "context_overflow",
           code: "context_length_exceeded",
+          ...(error.details && {
+            details: error.details,
+          }),
         },
       },
       error.statusCode as ContentfulStatusCode,

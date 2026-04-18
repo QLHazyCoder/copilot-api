@@ -2,6 +2,8 @@ import { events } from "fetch-event-stream"
 
 import type { SubagentMarker } from "~/routes/messages/subagent-marker"
 
+import { ensureChatPayloadWithinContextWindow } from "~/lib/context-budget"
+import { state } from "~/lib/state"
 import { copilotRequest } from "~/services/copilot-provider/create-provider"
 
 interface ChatCompletionsOptions {
@@ -15,20 +17,28 @@ export const createChatCompletions = async (
   payload: ChatCompletionsPayload,
   options: ChatCompletionsOptions = {},
 ) => {
-  const enableVision = payload.messages.some(
+  const selectedModel = state.models?.data.find(
+    (model) => model.id === payload.model,
+  )
+  const managedPayload = await ensureChatPayloadWithinContextWindow(
+    payload,
+    selectedModel,
+  )
+
+  const enableVision = managedPayload.messages.some(
     (x) =>
       typeof x.content !== "string"
       && x.content?.some((x) => x.type === "image_url"),
   )
 
-  const lastMessage = payload.messages.at(-1)
+  const lastMessage = managedPayload.messages.at(-1)
   const isAgentCall =
     lastMessage !== undefined
     && (lastMessage.role === "assistant" || lastMessage.role === "tool")
 
   const response = await copilotRequest({
     path: "/chat/completions",
-    body: payload,
+    body: managedPayload,
     vision: enableVision,
     initiator: options.initiator ?? (isAgentCall ? "agent" : "user"),
     subagentMarker: options.subagentMarker,
@@ -36,7 +46,7 @@ export const createChatCompletions = async (
     skipUsageLog: options.skipUsageLog,
   })
 
-  if (payload.stream) {
+  if (managedPayload.stream) {
     return events(response)
   }
 

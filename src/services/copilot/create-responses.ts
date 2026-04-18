@@ -2,6 +2,7 @@ import { events } from "fetch-event-stream"
 
 import type { SubagentMarker } from "~/routes/messages/subagent-marker"
 
+import { ensureResponsesPayloadWithinContextWindow } from "~/lib/context-budget"
 import { normalizeResponsesPayload } from "~/lib/responses-payload"
 import { state } from "~/lib/state"
 import { copilotRequest } from "~/services/copilot-provider/create-provider"
@@ -337,20 +338,26 @@ export const createResponses = async (
     (model) => model.id === payload.model,
   )
   normalizeResponsesPayload(payload, selectedModel)
-
-  // service_tier is not supported by github copilot
-  payload.service_tier = null
+  const managedPayload = await ensureResponsesPayloadWithinContextWindow(
+    payload,
+    selectedModel,
+  )
+  const requestPayload = {
+    ...managedPayload,
+    // service_tier is not supported by github copilot
+    service_tier: null,
+  } satisfies ResponsesPayload
 
   const response = await copilotRequest({
     path: "/responses",
-    body: payload,
+    body: requestPayload,
     vision,
     initiator,
     subagentMarker,
     sessionId,
   })
 
-  if (payload.stream) {
+  if (requestPayload.stream) {
     return events(response)
   }
 

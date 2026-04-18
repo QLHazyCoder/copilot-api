@@ -384,3 +384,19 @@ export const getTokenCount = async (
     output: outputTokens,
   }
 }
+
+export const getPromptTokenCount = async (
+  payload: ChatCompletionsPayload,
+  model: Model,
+): Promise<number> => {
+  const tokenizer = getTokenizerFromModel(model)
+  const encoder = await getEncodeChatFunction(tokenizer)
+  const constants = getModelConstants(model)
+
+  let promptTokens = calculateTokens(payload.messages, encoder, constants)
+  if (payload.tools && payload.tools.length > 0) {
+    promptTokens += numTokensForTools(payload.tools, encoder, constants)
+  }
+
+  return promptTokens
+}

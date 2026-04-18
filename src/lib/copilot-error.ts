@@ -31,16 +31,21 @@ export function isContextOverflow(message: string): boolean {
 export class ContextOverflowError extends Error {
   readonly statusCode: number
   readonly responseBody?: string
+  readonly details?: Record<string, unknown>
 
   constructor(
     message: string,
-    statusCode: number = 400,
-    responseBody?: string,
+    options: {
+      statusCode?: number
+      responseBody?: string
+      details?: Record<string, unknown>
+    } = {},
   ) {
     super(message)
     this.name = "ContextOverflowError"
-    this.statusCode = statusCode
-    this.responseBody = responseBody
+    this.statusCode = options.statusCode ?? 400
+    this.responseBody = options.responseBody
+    this.details = options.details
   }
 }
 

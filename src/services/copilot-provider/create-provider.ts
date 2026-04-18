@@ -182,7 +182,10 @@ async function throwRequestError(
     .text()
     .catch(() => "")
   if (isContextOverflow(errorText)) {
-    throw new ContextOverflowError(errorText, response.status, errorText)
+    throw new ContextOverflowError(errorText, {
+      statusCode: response.status,
+      responseBody: errorText,
+    })
   }
   consola.error(`Failed to request ${options.path}`, response)
   throw new HTTPError(`Failed to request ${options.path}`, response)

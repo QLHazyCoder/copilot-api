@@ -6,6 +6,8 @@ import type {
 } from "~/routes/messages/anthropic-types"
 import type { SubagentMarker } from "~/routes/messages/subagent-marker"
 
+import { ensureMessagesPayloadWithinContextWindow } from "~/lib/context-budget"
+import { state } from "~/lib/state"
 import { sanitizeAnthropicPayload } from "~/routes/messages/sanitize"
 import { copilotRequest } from "~/services/copilot-provider/create-provider"
 
@@ -59,14 +61,10 @@ export const createMessages = async (
     subagentMarker: null,
   },
 ): Promise<CreateMessagesReturn> => {
-  const enableVision = payload.messages.some(
-    (message) =>
-      Array.isArray(message.content)
-      && message.content.some((block) => block.type === "image"),
-  )
-
-  const inferredInitiator = (): "agent" | "user" => {
-    const lastMessage = payload.messages.at(-1)
+  const inferInitiator = (
+    nextPayload: AnthropicMessagesPayload,
+  ): "agent" | "user" => {
+    const lastMessage = nextPayload.messages.at(-1)
     if (lastMessage?.role !== "user") return "user"
     const hasUserInput =
       Array.isArray(lastMessage.content) ?
@@ -76,18 +74,31 @@ export const createMessages = async (
   }
 
   sanitizeAnthropicPayload(payload)
+  const selectedModel = state.models?.data.find(
+    (model) => model.id === payload.model,
+  )
+  const managedPayload = await ensureMessagesPayloadWithinContextWindow(
+    payload,
+    selectedModel,
+  )
+
+  const enableVision = managedPayload.messages.some(
+    (message) =>
+      Array.isArray(message.content)
+      && message.content.some((block) => block.type === "image"),
+  )
 
   const response = await copilotRequest({
     path: "/v1/messages",
-    body: payload,
+    body: managedPayload,
     vision: enableVision,
-    initiator: options.initiatorOverride ?? inferredInitiator(),
+    initiator: options.initiatorOverride ?? inferInitiator(managedPayload),
     subagentMarker: options.subagentMarker,
     sessionId: options.sessionId,
-    extraHeaders: buildBetaHeaders(options.anthropicBetaHeader, payload),
+    extraHeaders: buildBetaHeaders(options.anthropicBetaHeader, managedPayload),
   })
 
-  if (payload.stream) {
+  if (managedPayload.stream) {
     return events(response)
   }
 

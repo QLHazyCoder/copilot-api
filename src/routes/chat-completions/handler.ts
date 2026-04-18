@@ -12,7 +12,6 @@ import { checkRateLimit } from "~/lib/rate-limit"
 import { resolveConversationIdFromHeaders } from "~/lib/session"
 import { state } from "~/lib/state"
 import { getTokenCount } from "~/lib/tokenizer"
-import { isNullish } from "~/lib/utils"
 import {
   type AnthropicResponse,
   type AnthropicStreamEventData,
@@ -86,7 +85,6 @@ export async function handleCompletion(c: Context) {
   }
 
   await logTokenCountIfPossible(payload, selectedModel)
-  payload = applyDefaultMaxTokens(payload, selectedModel)
 
   const fallbackResponse = await resolveFallbackResponse({
     c,
@@ -116,22 +114,6 @@ const logTokenCountIfPossible = async (
   } catch (error) {
     logger.warn("Failed to calculate token count:", error)
   }
-}
-
-const applyDefaultMaxTokens = (
-  payload: ChatCompletionsPayload,
-  selectedModel: SelectedModel | undefined,
-): ChatCompletionsPayload => {
-  if (!isNullish(payload.max_tokens)) {
-    return payload
-  }
-
-  const nextPayload = {
-    ...payload,
-    max_tokens: selectedModel?.capabilities.limits.max_output_tokens,
-  }
-  logger.debug("Set max_tokens to:", JSON.stringify(nextPayload.max_tokens))
-  return nextPayload
 }
 
 const resolveFallbackResponse = async ({
