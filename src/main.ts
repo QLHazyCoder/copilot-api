@@ -3,13 +3,13 @@
 import consola from "consola"
 import { serve, type ServerHandler } from "srvx"
 
-import { getActiveAccount } from "./lib/accounts"
+import { getActiveAccount, setActiveAccount } from "./lib/accounts"
 import { mergeConfigWithDefaults } from "./lib/config"
-import { copilotTokenManager } from "./lib/copilot-token-manager"
 import { ensurePaths } from "./lib/paths"
 import { initProxyFromEnv } from "./lib/proxy"
+import { runtimeManager } from "./lib/runtime-manager"
 import { state } from "./lib/state"
-import { cacheModels, cacheVSCodeVersion } from "./lib/utils"
+import { cacheVSCodeVersion } from "./lib/utils"
 
 // Configuration from environment variables
 const PORT = Number.parseInt(process.env.PORT || "4141", 10)
@@ -52,21 +52,23 @@ async function main(): Promise<void> {
   const activeAccount = await getActiveAccount()
 
   if (activeAccount) {
-    state.githubToken = activeAccount.token
-    state.accountType = activeAccount.accountType
+    if (!config.activeAccountId) {
+      await setActiveAccount(activeAccount.id)
+    }
+
     consola.info(`Logged in as ${activeAccount.login}`)
 
     if (state.showToken) {
       consola.info("GitHub token:", activeAccount.token)
     }
 
-    await copilotTokenManager.getToken()
-    await cacheModels()
+    await runtimeManager.initialize(activeAccount)
 
     consola.info(
       `Available models: \n${state.models?.data.map((model) => `- ${model.id}`).join("\n")}`,
     )
   } else {
+    runtimeManager.clearActiveContext()
     consola.warn("No account configured. Visit /admin to add an account.")
   }
 

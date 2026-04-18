@@ -1,5 +1,6 @@
 import { GITHUB_API_BASE_URL, githubHeaders } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
+import { runtimeContext } from "~/lib/runtime-context"
 import { state } from "~/lib/state"
 
 interface GetCopilotUsageOptions {
@@ -9,13 +10,16 @@ interface GetCopilotUsageOptions {
 export const getCopilotUsage = async (
   options?: GetCopilotUsageOptions,
 ): Promise<CopilotUsageResponse> => {
-  const requestState =
-    options?.githubTokenOverride ?
-      { ...state, githubToken: options.githubTokenOverride }
-    : state
+  const githubToken =
+    options?.githubTokenOverride
+    ?? runtimeContext.getStore()?.githubToken
+    ?? state.githubToken
+  if (!githubToken) {
+    throw new Error("No GitHub token available for Copilot usage request")
+  }
 
   const response = await fetch(`${GITHUB_API_BASE_URL}/copilot_internal/user`, {
-    headers: githubHeaders(requestState),
+    headers: githubHeaders(githubToken),
   })
 
   if (!response.ok) {

@@ -4,7 +4,7 @@ import type { SubagentMarker } from "~/routes/messages/subagent-marker"
 
 import { ensureResponsesPayloadWithinContextWindow } from "~/lib/context-budget"
 import { normalizeResponsesPayload } from "~/lib/responses-payload"
-import { state } from "~/lib/state"
+import { runtimeManager } from "~/lib/runtime-manager"
 import { copilotRequest } from "~/services/copilot-provider/create-provider"
 
 export interface ResponsesPayload {
@@ -334,9 +334,9 @@ export const createResponses = async (
   payload: ResponsesPayload,
   { vision, initiator, subagentMarker, sessionId }: ResponsesRequestOptions,
 ): Promise<CreateResponsesReturn> => {
-  const selectedModel = state.models?.data.find(
-    (model) => model.id === payload.model,
-  )
+  const selectedModel = runtimeManager
+    .getCurrentModels()
+    ?.data.find((model) => model.id === payload.model)
   normalizeResponsesPayload(payload, selectedModel)
   const managedPayload = await ensureResponsesPayloadWithinContextWindow(
     payload,

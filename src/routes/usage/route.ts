@@ -1,7 +1,7 @@
 import { Hono } from "hono"
 
 import { getConfig } from "~/lib/config"
-import { state } from "~/lib/state"
+import { runtimeManager } from "~/lib/runtime-manager"
 import { createChatCompletions } from "~/services/copilot/create-chat-completions"
 import { getCopilotUsage } from "~/services/github/get-copilot-usage"
 
@@ -28,69 +28,49 @@ function getConfiguredHealthCheckDelayMs(): number | null {
 }
 
 interface Gpt4oHealthCheckState {
-  lastAccountId: string | null
+  inFlight: Promise<boolean | null> | null
   isAvailable: boolean | null
   lastCheckedAt: number | null
-  isChecking: boolean
-  timer: ReturnType<typeof setTimeout> | null
 }
 
-const gpt4oHealthCheckState: Gpt4oHealthCheckState = {
-  lastAccountId: null,
-  isAvailable: null,
-  lastCheckedAt: null,
-  isChecking: false,
-  timer: null,
+const gpt4oHealthCheckStateByAccountId = new Map<
+  string,
+  Gpt4oHealthCheckState
+>()
+
+function getHealthCheckState(accountId: string): Gpt4oHealthCheckState {
+  let healthCheckState = gpt4oHealthCheckStateByAccountId.get(accountId)
+  if (healthCheckState) {
+    return healthCheckState
+  }
+
+  healthCheckState = {
+    inFlight: null,
+    isAvailable: null,
+    lastCheckedAt: null,
+  }
+  gpt4oHealthCheckStateByAccountId.set(accountId, healthCheckState)
+  return healthCheckState
 }
 
-function resetHealthCheckStateForAccount(accountId: string | null): void {
-  if (gpt4oHealthCheckState.lastAccountId === accountId) {
-    return
+function isHealthCheckStale(state: Gpt4oHealthCheckState): boolean {
+  const delayMs = getConfiguredHealthCheckDelayMs()
+  if (delayMs === null) {
+    return false
   }
 
-  gpt4oHealthCheckState.lastAccountId = accountId
-  gpt4oHealthCheckState.isAvailable = null
-  gpt4oHealthCheckState.lastCheckedAt = null
+  if (state.lastCheckedAt === null) {
+    return true
+  }
+
+  return Date.now() - state.lastCheckedAt >= delayMs
 }
 
-function scheduleNextHealthCheck(delayMs?: number): void {
-  if (gpt4oHealthCheckState.timer) {
-    clearTimeout(gpt4oHealthCheckState.timer)
+function runGpt4oHealthCheck(accountId: string): Promise<boolean | null> {
+  const healthCheckState = getHealthCheckState(accountId)
+  if (healthCheckState.inFlight) {
+    return healthCheckState.inFlight
   }
-
-  const nextDelayMs =
-    typeof delayMs === "number" && Number.isFinite(delayMs) && delayMs >= 0 ?
-      Math.floor(delayMs)
-    : getConfiguredHealthCheckDelayMs()
-
-  if (nextDelayMs === null) {
-    gpt4oHealthCheckState.timer = null
-    return
-  }
-
-  gpt4oHealthCheckState.timer = setTimeout(() => {
-    void runGpt4oHealthCheck()
-  }, nextDelayMs)
-}
-
-let gpt4oHealthCheckInFlight: Promise<boolean | null> | null = null
-
-function runGpt4oHealthCheck(): Promise<boolean | null> {
-  const activeAccountId = getConfig().activeAccountId ?? null
-  resetHealthCheckStateForAccount(activeAccountId)
-
-  if (!activeAccountId || !state.githubToken) {
-    gpt4oHealthCheckState.isAvailable = null
-    gpt4oHealthCheckState.lastCheckedAt = Date.now()
-    scheduleNextHealthCheck()
-    return Promise.resolve(null)
-  }
-
-  if (gpt4oHealthCheckInFlight) {
-    return gpt4oHealthCheckInFlight
-  }
-
-  gpt4oHealthCheckState.isChecking = true
 
   const checkPromise = createChatCompletions(
     {
@@ -105,33 +85,34 @@ function runGpt4oHealthCheck(): Promise<boolean | null> {
     .then(() => true)
     .catch(() => false)
     .then((isAvailable) => {
-      gpt4oHealthCheckState.isAvailable = isAvailable
+      healthCheckState.isAvailable = isAvailable
       return isAvailable
     })
     .finally(() => {
-      gpt4oHealthCheckState.lastCheckedAt = Date.now()
-      gpt4oHealthCheckState.isChecking = false
-      gpt4oHealthCheckInFlight = null
-      scheduleNextHealthCheck()
+      healthCheckState.lastCheckedAt = Date.now()
+      healthCheckState.inFlight = null
     })
 
-  gpt4oHealthCheckInFlight = checkPromise
+  healthCheckState.inFlight = checkPromise
   return checkPromise
 }
 
 async function getGpt4oHealthAvailability(): Promise<boolean | null> {
-  const activeAccountId = getConfig().activeAccountId ?? null
-  const hasAccountChanged =
-    gpt4oHealthCheckState.lastAccountId !== activeAccountId
-
-  if (hasAccountChanged || gpt4oHealthCheckState.isAvailable === null) {
-    await runGpt4oHealthCheck()
+  const runtime = runtimeManager.getCurrentContext()
+  if (!runtime) {
+    return null
   }
 
-  return gpt4oHealthCheckState.isAvailable
-}
+  const healthCheckState = getHealthCheckState(runtime.accountId)
+  if (
+    healthCheckState.isAvailable === null
+    || isHealthCheckStale(healthCheckState)
+  ) {
+    return await runGpt4oHealthCheck(runtime.accountId)
+  }
 
-scheduleNextHealthCheck(0)
+  return healthCheckState.isAvailable
+}
 
 usageRoute.get("/", async (c) => {
   try {

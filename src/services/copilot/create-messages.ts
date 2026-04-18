@@ -7,7 +7,7 @@ import type {
 import type { SubagentMarker } from "~/routes/messages/subagent-marker"
 
 import { ensureMessagesPayloadWithinContextWindow } from "~/lib/context-budget"
-import { state } from "~/lib/state"
+import { runtimeManager } from "~/lib/runtime-manager"
 import { sanitizeAnthropicPayload } from "~/routes/messages/sanitize"
 import { copilotRequest } from "~/services/copilot-provider/create-provider"
 
@@ -74,9 +74,9 @@ export const createMessages = async (
   }
 
   sanitizeAnthropicPayload(payload)
-  const selectedModel = state.models?.data.find(
-    (model) => model.id === payload.model,
-  )
+  const selectedModel = runtimeManager
+    .getCurrentModels()
+    ?.data.find((model) => model.id === payload.model)
   const managedPayload = await ensureMessagesPayloadWithinContextWindow(
     payload,
     selectedModel,

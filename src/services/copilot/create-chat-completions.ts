@@ -3,7 +3,7 @@ import { events } from "fetch-event-stream"
 import type { SubagentMarker } from "~/routes/messages/subagent-marker"
 
 import { ensureChatPayloadWithinContextWindow } from "~/lib/context-budget"
-import { state } from "~/lib/state"
+import { runtimeManager } from "~/lib/runtime-manager"
 import { copilotRequest } from "~/services/copilot-provider/create-provider"
 
 interface ChatCompletionsOptions {
@@ -17,9 +17,9 @@ export const createChatCompletions = async (
   payload: ChatCompletionsPayload,
   options: ChatCompletionsOptions = {},
 ) => {
-  const selectedModel = state.models?.data.find(
-    (model) => model.id === payload.model,
-  )
+  const selectedModel = runtimeManager
+    .getCurrentModels()
+    ?.data.find((model) => model.id === payload.model)
   const managedPayload = await ensureChatPayloadWithinContextWindow(
     payload,
     selectedModel,

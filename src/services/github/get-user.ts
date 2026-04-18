@@ -1,13 +1,9 @@
-import { GITHUB_API_BASE_URL, standardHeaders } from "~/lib/api-config"
+import { GITHUB_API_BASE_URL, githubHeaders } from "~/lib/api-config"
 import { HTTPError } from "~/lib/error"
-import { state } from "~/lib/state"
 
-export async function getGitHubUser() {
+export async function getGitHubUser(githubToken: string) {
   const response = await fetch(`${GITHUB_API_BASE_URL}/user`, {
-    headers: {
-      authorization: `token ${state.githubToken}`,
-      ...standardHeaders(),
-    },
+    headers: githubHeaders(githubToken),
   })
 
   if (!response.ok) throw new HTTPError("Failed to get GitHub user", response)

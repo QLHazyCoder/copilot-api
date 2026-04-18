@@ -1,8 +1,7 @@
 import type { Model } from "~/services/copilot/get-models"
 
 import { getMappedModel } from "./config"
-import { state } from "./state"
-import { cacheModels } from "./utils"
+import { runtimeManager } from "./runtime-manager"
 
 const CHAT_COMPLETIONS_ENDPOINT = "/chat/completions"
 const CHAT_COMPLETIONS_V1_ENDPOINT = "/v1/chat/completions"
@@ -34,11 +33,20 @@ export async function resolveModelRequest(
   requestedModel: string,
 ): Promise<ResolvedModelRequest> {
   const configuredModel = getMappedModel(requestedModel)
+  let models = runtimeManager.getCurrentModels()
 
-  let resolvedModel = findModelFromState(requestedModel, configuredModel)
+  let resolvedModel = findModelFromModels(
+    models?.data,
+    requestedModel,
+    configuredModel,
+  )
   if (!resolvedModel.model) {
-    await cacheModels()
-    resolvedModel = findModelFromState(requestedModel, configuredModel)
+    models = await runtimeManager.refreshModelsForCurrentContext(true)
+    resolvedModel = findModelFromModels(
+      models.data,
+      requestedModel,
+      configuredModel,
+    )
   }
 
   return {
@@ -97,14 +105,15 @@ export function buildUnknownModelMessage(
   return `Unknown model: ${resolution.requestedModel}. It resolves to ${resolution.routedModel}, but that target model is not available. Check /v1/models or configure Model Mappings in /admin.`
 }
 
-function findModelFromState(
+function findModelFromModels(
+  models: Array<Model> | undefined,
   requestedModel: string,
   configuredModel: string,
 ): { model: Model | undefined; routedModel: string } {
   const lookupCandidates = getLookupCandidates(requestedModel, configuredModel)
 
   for (const candidate of lookupCandidates) {
-    const model = state.models?.data.find((item) => item.id === candidate)
+    const model = models?.find((item) => item.id === candidate)
     if (model) {
       return {
         model,

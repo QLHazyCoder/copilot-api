@@ -1,19 +1,21 @@
 import { Hono } from "hono"
 
 import { forwardError } from "~/lib/error"
-import { state } from "~/lib/state"
+import { runtimeManager } from "~/lib/runtime-manager"
 import { cacheModels } from "~/lib/utils"
 
 export const modelRoutes = new Hono()
 
 modelRoutes.get("/", async (c) => {
   try {
-    if (!state.models) {
+    let modelsResponse = runtimeManager.getCurrentModels()
+    if (!modelsResponse) {
       // This should be handled by startup logic, but as a fallback.
       await cacheModels()
+      modelsResponse = runtimeManager.getCurrentModels()
     }
 
-    const models = state.models?.data.map((model) => ({
+    const models = modelsResponse?.data.map((model) => ({
       id: model.id,
       object: "model",
       type: "model",

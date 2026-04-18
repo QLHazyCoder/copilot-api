@@ -32,15 +32,22 @@ export function getAccounts(): Promise<AccountsData> {
  */
 async function saveAccounts(data: AccountsData): Promise<void> {
   const config = getConfig()
-  config.accounts = data.accounts
-  config.activeAccountId = data.activeAccountId
-  await saveConfig(config)
+  await saveConfig({
+    ...config,
+    accounts: data.accounts,
+    activeAccountId: data.activeAccountId,
+  })
 }
 
 /**
  * Add a new account or update existing one
  */
-export async function addAccount(account: Account): Promise<void> {
+export async function addAccount(
+  account: Account,
+  options: {
+    activateIfNone?: boolean
+  } = {},
+): Promise<void> {
   const data = await getAccounts()
 
   // Check if account already exists (by id or login)
@@ -59,7 +66,7 @@ export async function addAccount(account: Account): Promise<void> {
   }
 
   // If this is the first account or no active account, set it as active
-  if (!data.activeAccountId) {
+  if ((options.activateIfNone ?? true) && !data.activeAccountId) {
     data.activeAccountId = account.id
   }
 
@@ -159,4 +166,11 @@ export async function getActiveAccount(): Promise<Account | null> {
   }
 
   return data.accounts.find((a) => a.id === data.activeAccountId) ?? null
+}
+
+export async function getAccountById(
+  accountId: string,
+): Promise<Account | null> {
+  const data = await getAccounts()
+  return data.accounts.find((account) => account.id === accountId) ?? null
 }

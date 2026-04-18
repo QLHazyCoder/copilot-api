@@ -1,6 +1,6 @@
 import type { Model } from "~/services/copilot/get-models"
 
-import { state } from "~/lib/state"
+import { runtimeManager } from "~/lib/runtime-manager"
 import {
   type ChatCompletionResponse,
   type ChatCompletionsPayload,
@@ -34,7 +34,9 @@ export function translateToOpenAI(
   payload: AnthropicMessagesPayload,
 ): ChatCompletionsPayload {
   const modelId = payload.model
-  const model = state.models?.data.find((m) => m.id === modelId)
+  const model = runtimeManager
+    .getCurrentModels()
+    ?.data.find((m) => m.id === modelId)
   const thinkingBudget = getThinkingBudget(payload, model)
   return {
     model: modelId,

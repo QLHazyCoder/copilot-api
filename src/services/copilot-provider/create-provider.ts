@@ -2,6 +2,7 @@ import type { FetchFunction } from "@ai-sdk/provider-utils"
 
 import consola from "consola"
 
+import type { RuntimeAccountContext } from "~/lib/runtime-types"
 import type { SubagentMarker } from "~/routes/messages/subagent-marker"
 
 import {
@@ -14,6 +15,7 @@ import { ContextOverflowError, isContextOverflow } from "~/lib/copilot-error"
 import { copilotTokenManager } from "~/lib/copilot-token-manager"
 import { HTTPError } from "~/lib/error"
 import { createHandlerLogger } from "~/lib/logger"
+import { runtimeContext } from "~/lib/runtime-context"
 import { state } from "~/lib/state"
 import {
   appendUsageRequestLog,
@@ -28,24 +30,22 @@ const usageLogger = createHandlerLogger("usage-log")
  * When the initial request fails with 401/403, it clears the token,
  * gets a fresh one, and retries with the updated Authorization header.
  */
-function createCopilotFetch(): FetchFunction {
+function createCopilotFetch(runtime: RuntimeAccountContext): FetchFunction {
   const RETRYABLE_STATUSES = new Set([401, 403])
 
   const copilotFetch = async (
     input: Parameters<typeof fetch>[0],
     init?: Parameters<typeof fetch>[1],
   ) => {
-    await copilotTokenManager.getToken()
-
     const response = await globalThis.fetch(input, init)
 
     if (RETRYABLE_STATUSES.has(response.status)) {
-      copilotTokenManager.clear()
-      await copilotTokenManager.getToken()
+      copilotTokenManager.clear(runtime.accountId)
+      const refreshedToken = await copilotTokenManager.getToken(runtime)
 
       // Replace Authorization header with new token
       const currentHeaders = new Headers(init?.headers)
-      currentHeaders.set("Authorization", `Bearer ${state.copilotToken}`)
+      currentHeaders.set("Authorization", `Bearer ${refreshedToken}`)
       return globalThis.fetch(input, {
         ...init,
         headers: Object.fromEntries(currentHeaders.entries()),
@@ -69,6 +69,28 @@ function getRequestModel(body: unknown): string | undefined {
   }
 
   return model
+}
+
+function resolveRequestRuntime(): RuntimeAccountContext | null {
+  const runtime = runtimeContext.getStore()
+  if (runtime) {
+    return runtime
+  }
+
+  if (!state.githubToken) {
+    return null
+  }
+
+  return {
+    accountId: getConfig().activeAccountId ?? "__legacy__",
+    accountType:
+      state.accountType === "business" || state.accountType === "enterprise" ?
+        state.accountType
+      : "individual",
+    githubToken: state.githubToken,
+    login: "legacy",
+    revision: 0,
+  }
 }
 
 function getRequestUsageDelta(model: string | undefined): {
@@ -95,10 +117,15 @@ function getRequestUsageDelta(model: string | undefined): {
   }
 }
 
-function scheduleRequestUsageSummaryRefresh(logId: string): void {
+function scheduleRequestUsageSummaryRefresh(
+  logId: string,
+  runtime: RuntimeAccountContext | null,
+): void {
   setTimeout(async () => {
     try {
-      const usage = await getCopilotUsage()
+      const usage = await getCopilotUsage({
+        githubTokenOverride: runtime?.githubToken,
+      })
       const premium = usage.quota_snapshots.premium_interactions
       const chat = usage.quota_snapshots.chat
       const completions = usage.quota_snapshots.completions
@@ -151,9 +178,10 @@ export interface CopilotRequestOptions {
 
 function buildCopilotRequestHeaders(
   options: CopilotRequestOptions,
+  copilotToken: string,
 ): Record<string, string> {
   const headers: Record<string, string> = {
-    ...copilotHeaders(state, options.vision),
+    ...copilotHeaders(copilotToken, options.vision),
   }
 
   if (options.initiator) {
@@ -246,12 +274,13 @@ function persistUsageLogForPostRequest(
   response: Response,
 ): void {
   try {
+    const runtime = resolveRequestRuntime()
     const model = getRequestModel(options.body)
     const usage = getRequestUsageDelta(model)
     const countMode = getUsageLogCountMode()
     const responseType = getResponseType(response)
     const requestLog = appendUsageRequestLog({
-      accountId: getConfig().activeAccountId ?? null,
+      accountId: runtime?.accountId ?? null,
       endpoint: options.path,
       responseType,
       statusCode: response.status,
@@ -273,7 +302,7 @@ function persistUsageLogForPostRequest(
       })
     }
 
-    scheduleRequestUsageSummaryRefresh(requestLog.logId)
+    scheduleRequestUsageSummaryRefresh(requestLog.logId, runtime)
   } catch {
     // Ignore usage log persistence errors
   }
@@ -305,9 +334,15 @@ function logSkippedUsageLog(options: CopilotRequestOptions): void {
 export async function copilotRequest(
   options: CopilotRequestOptions,
 ): Promise<Response> {
-  const headers = buildCopilotRequestHeaders(options)
-  const copilotFetch = createCopilotFetch()
-  const url = `${copilotBaseUrl(state)}${options.path}`
+  const runtime = resolveRequestRuntime()
+  if (!runtime) {
+    throw new Error("No runtime account context available for Copilot request")
+  }
+
+  const token = await copilotTokenManager.getToken(runtime)
+  const headers = buildCopilotRequestHeaders(options, token)
+  const copilotFetch = createCopilotFetch(runtime)
+  const url = `${copilotBaseUrl(runtime)}${options.path}`
   const method = options.method ?? "POST"
 
   const response = await copilotFetch(url, {

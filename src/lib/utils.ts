@@ -1,8 +1,8 @@
 import consola from "consola"
 
-import { getModels } from "~/services/copilot/get-models"
 import { getVSCodeVersion } from "~/services/get-vscode-version"
 
+import { runtimeManager } from "./runtime-manager"
 import { state } from "./state"
 
 export const sleep = (ms: number) =>
@@ -14,7 +14,7 @@ export const isNullish = (value: unknown): value is null | undefined =>
   value === null || value === undefined
 
 export async function cacheModels(): Promise<void> {
-  const models = await getModels()
+  const models = await runtimeManager.refreshModelsForCurrentContext(true)
   state.models = models
 }
 

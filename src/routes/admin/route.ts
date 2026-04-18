@@ -3,6 +3,7 @@ import { Hono } from "hono"
 
 import {
   addAccount,
+  getAccountById,
   getAccounts,
   getActiveAccount,
   removeAccount,
@@ -23,6 +24,7 @@ import {
 } from "~/lib/config"
 import { copilotTokenManager } from "~/lib/copilot-token-manager"
 import { normalizeApiKeys } from "~/lib/request-auth"
+import { runtimeManager } from "~/lib/runtime-manager"
 import { state } from "~/lib/state"
 import {
   clearAllUsageLogs,
@@ -677,7 +679,7 @@ adminRoutes.put("/api/accounts/reorder", async (c) => {
 adminRoutes.post("/api/accounts/:id/activate", async (c) => {
   const accountId = c.req.param("id")
 
-  const account = await setActiveAccount(accountId)
+  const account = await getAccountById(accountId)
 
   if (!account) {
     return c.json(
@@ -691,19 +693,15 @@ adminRoutes.post("/api/accounts/:id/activate", async (c) => {
     )
   }
 
-  // Update state with new token
-  state.githubToken = account.token
-  state.accountType = account.accountType
-
-  // Refresh Copilot token with new account
   try {
-    copilotTokenManager.clear()
-    await copilotTokenManager.getToken()
+    const candidateContext = await runtimeManager.prepareAccountContext(account)
+    await setActiveAccount(accountId)
+    runtimeManager.commitActiveContext(candidateContext)
   } catch {
     return c.json(
       {
         error: {
-          message: "Failed to refresh Copilot token after account switch",
+          message: "Failed to prepare runtime for the selected account",
           type: "token_error",
         },
       },
@@ -725,6 +723,30 @@ adminRoutes.post("/api/accounts/:id/activate", async (c) => {
 // Delete an account
 adminRoutes.delete("/api/accounts/:id", async (c) => {
   const accountId = c.req.param("id")
+  const accountsData = await getAccounts()
+  const isRemovingActiveAccount = accountsData.activeAccountId === accountId
+  const fallbackAccount =
+    isRemovingActiveAccount ?
+      (accountsData.accounts.find((account) => account.id !== accountId)
+      ?? null)
+    : null
+  let fallbackContext = null
+  if (fallbackAccount) {
+    try {
+      fallbackContext =
+        await runtimeManager.prepareAccountContext(fallbackAccount)
+    } catch {
+      return c.json(
+        {
+          error: {
+            message: "Failed to prepare runtime for the fallback account",
+            type: "token_error",
+          },
+        },
+        500,
+      )
+    }
+  }
 
   const removed = await removeAccount(accountId)
 
@@ -740,22 +762,12 @@ adminRoutes.delete("/api/accounts/:id", async (c) => {
     )
   }
 
-  // If we removed the current account, update state
-  const activeAccount = await getActiveAccount()
-  if (activeAccount) {
-    state.githubToken = activeAccount.token
-    state.accountType = activeAccount.accountType
+  runtimeManager.clearAccount(accountId)
 
-    // Refresh Copilot token
-    try {
-      copilotTokenManager.clear()
-      await copilotTokenManager.getToken()
-    } catch {
-      // Ignore refresh errors on delete
-    }
-  } else {
-    state.githubToken = undefined
-    copilotTokenManager.clear()
+  if (fallbackContext) {
+    runtimeManager.commitActiveContext(fallbackContext)
+  } else if (isRemovingActiveAccount) {
+    runtimeManager.clearActiveContext()
   }
 
   return c.json({ success: true })
@@ -799,19 +811,14 @@ type CreateAccountResult =
 /**
  * Create and save account after successful authorization
  */
-/* eslint-disable require-atomic-updates */
 async function createAccountFromToken(
   token: string,
   accountType: string,
 ): Promise<CreateAccountResult> {
-  const previousToken = state.githubToken
-  state.githubToken = token
-
   let user
   try {
-    user = await getGitHubUser()
+    user = await getGitHubUser(token)
   } catch {
-    state.githubToken = previousToken
     return { success: false, error: "Failed to get user info" }
   }
 
@@ -829,21 +836,31 @@ async function createAccountFromToken(
     createdAt: new Date().toISOString(),
   }
 
-  await addAccount(account)
+  const accountsData = await getAccounts()
+  const shouldActivateAccount = !accountsData.activeAccountId
+  let candidateContext = null
+  if (shouldActivateAccount) {
+    try {
+      candidateContext = await runtimeManager.prepareAccountContext(account)
+    } catch {
+      return {
+        success: false,
+        error: "Failed to prepare runtime for the first account",
+      }
+    }
+  }
 
-  state.githubToken = token
-  state.accountType = account.accountType
+  await addAccount(account, {
+    activateIfNone: false,
+  })
 
-  try {
-    copilotTokenManager.clear()
-    await copilotTokenManager.getToken()
-  } catch {
-    // Continue even if Copilot token fails
+  if (candidateContext) {
+    await setActiveAccount(account.id)
+    runtimeManager.commitActiveContext(candidateContext)
   }
 
   return { success: true, account }
 }
-/* eslint-enable require-atomic-updates */
 
 // Poll for access token after user authorizes
 
@@ -925,10 +942,11 @@ adminRoutes.post("/api/auth/poll", async (c) => {
 // Get current auth status
 adminRoutes.get("/api/auth/status", async (c) => {
   const activeAccount = await getActiveAccount()
+  const activeContext = runtimeManager.getActiveContext()
 
   return c.json({
     authenticated:
-      Boolean(state.githubToken) && copilotTokenManager.hasValidToken(),
+      activeContext ? copilotTokenManager.hasValidToken(activeContext) : false,
     hasAccounts: Boolean(activeAccount),
     activeAccount:
       activeAccount ?
