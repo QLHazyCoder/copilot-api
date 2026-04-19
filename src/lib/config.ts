@@ -1,5 +1,6 @@
 import consola from "consola"
 import fs from "node:fs"
+import path from "node:path"
 
 import { PATHS } from "./paths"
 
@@ -52,6 +53,13 @@ export interface AppConfig {
   activeAccountId?: string | null
 }
 
+export type ReadonlyAppConfig = DeepReadonly<AppConfig>
+
+type DeepReadonly<T> =
+  T extends Array<infer U> ? ReadonlyArray<DeepReadonly<U>>
+  : T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+  : T
+
 const gpt5ExplorationPrompt = `## Exploration and reading files
 - **Think first.** Before any tool call, decide ALL files/resources you will need.
 - **Batch everything.** If you need multiple files (even from different places), read them together.
@@ -98,7 +106,8 @@ const defaultConfig: AppConfig = {
   activeAccountId: null,
 }
 
-let cachedConfig: AppConfig | null = null
+let cachedConfig: ReadonlyAppConfig | null = null
+let configWriteChain: Promise<void> = Promise.resolve()
 
 const VALID_REASONING_EFFORTS = new Set<ReasoningEffort>([
   "none",
@@ -262,42 +271,61 @@ export function mergeConfigWithDefaults(): AppConfig {
     || premiumMultiplierMergeResult.changed
     || usageLogCountModeMergeResult.changed
 
+  let effectiveConfig = mergedConfig
   if (changed) {
     try {
-      fs.writeFileSync(
-        PATHS.CONFIG_PATH,
-        `${JSON.stringify(mergedConfig, null, 2)}\n`,
-        "utf8",
-      )
+      writeConfigAtomicallySync(mergedConfig)
+      cachedConfig = freezeConfig(mergedConfig)
+      return cloneConfig(mergedConfig)
     } catch (writeError) {
       consola.warn(
         "Failed to write merged default config values to config file",
         writeError,
       )
+      effectiveConfig = config
     }
   }
 
-  cachedConfig = mergedConfig
-  return mergedConfig
+  cachedConfig = freezeConfig(effectiveConfig)
+  return cloneConfig(effectiveConfig)
 }
 
-export function getConfig(): AppConfig {
-  cachedConfig ??= readConfigFromDisk()
+export function getConfig(): ReadonlyAppConfig {
+  cachedConfig ??= freezeConfig(readConfigFromDisk())
   return cachedConfig
 }
 
 /**
  * Save config to disk (async)
  */
-export async function saveConfig(config: AppConfig): Promise<void> {
-  ensureConfigFile()
-  const normalizedConfig = {
-    ...config,
-    usageLogCountMode: normalizeUsageLogCountMode(config.usageLogCountMode),
-  } satisfies AppConfig
-  cachedConfig = normalizedConfig
-  const content = `${JSON.stringify(normalizedConfig, null, 2)}\n`
-  await fs.promises.writeFile(PATHS.CONFIG_PATH, content, "utf8")
+export async function saveConfig(
+  config: AppConfig | ReadonlyAppConfig,
+): Promise<void> {
+  await runConfigWrite(async () => {
+    const normalizedConfig = normalizeConfig(config)
+    await writeConfigAtomically(normalizedConfig)
+    cachedConfig = freezeConfig(normalizedConfig)
+  })
+}
+
+export async function updateConfig(
+  updater: (
+    config: ReadonlyAppConfig,
+  ) => AppConfig | ReadonlyAppConfig | Promise<AppConfig | ReadonlyAppConfig>,
+): Promise<ReadonlyAppConfig> {
+  let nextConfigSnapshot!: ReadonlyAppConfig
+
+  await runConfigWrite(async () => {
+    const currentConfig = getMutableConfigSnapshot()
+    const readonlyConfig = freezeConfig(currentConfig)
+    const updatedConfig = await updater(readonlyConfig)
+    const normalizedConfig = normalizeConfig(updatedConfig)
+    await writeConfigAtomically(normalizedConfig)
+    nextConfigSnapshot = freezeConfig(normalizedConfig)
+    cachedConfig = nextConfigSnapshot
+  })
+
+  return nextConfigSnapshot
 }
 
 export function getExtraPromptForModel(model: string): string {
@@ -339,4 +367,118 @@ export function getAnthropicApiKey(): string | undefined {
 
 export function getUsageLogCountMode(): UsageLogCountMode {
   return normalizeUsageLogCountMode(getConfig().usageLogCountMode)
+}
+
+function normalizeConfig(config: AppConfig | ReadonlyAppConfig): AppConfig {
+  return {
+    ...cloneConfig(config),
+    usageLogCountMode: normalizeUsageLogCountMode(config.usageLogCountMode),
+  } satisfies AppConfig
+}
+
+function cloneConfig(config: AppConfig | ReadonlyAppConfig): AppConfig {
+  return structuredClone(config) as AppConfig
+}
+
+function freezeConfig(config: AppConfig): ReadonlyAppConfig {
+  const clonedConfig = cloneConfig(config)
+  return deepFreeze(clonedConfig) as ReadonlyAppConfig
+}
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value !== "object" || value === null) {
+    return value
+  }
+
+  const propertyNames = Reflect.ownKeys(value)
+  for (const propertyName of propertyNames) {
+    const propertyValue = (value as Record<PropertyKey, unknown>)[propertyName]
+    if (typeof propertyValue === "object" && propertyValue !== null) {
+      deepFreeze(propertyValue)
+    }
+  }
+
+  return Object.freeze(value)
+}
+
+function getMutableConfigSnapshot(): AppConfig {
+  return cloneConfig(cachedConfig ?? readConfigFromDisk())
+}
+
+function runConfigWrite(task: () => Promise<void>): Promise<void> {
+  const run = configWriteChain.then(task)
+  configWriteChain = run.catch(() => {})
+  return run
+}
+
+async function writeConfigAtomically(config: AppConfig): Promise<void> {
+  ensureConfigFile()
+  const content = `${JSON.stringify(config, null, 2)}\n`
+  const tempPath = buildTempConfigPath()
+
+  await fs.promises.writeFile(tempPath, content, "utf8")
+  try {
+    await fs.promises.chmod(tempPath, 0o600)
+  } catch {
+    // Ignore chmod failures on unsupported platforms.
+  }
+
+  try {
+    await fs.promises.rename(tempPath, PATHS.CONFIG_PATH)
+  } catch (error) {
+    if (isRenameReplaceError(error)) {
+      await fs.promises.rm(PATHS.CONFIG_PATH, { force: true })
+      await fs.promises.rename(tempPath, PATHS.CONFIG_PATH)
+    } else {
+      throw error
+    }
+  } finally {
+    await fs.promises.rm(tempPath, { force: true }).catch(() => {})
+  }
+}
+
+function writeConfigAtomicallySync(config: AppConfig): void {
+  ensureConfigFile()
+  const content = `${JSON.stringify(config, null, 2)}\n`
+  const tempPath = buildTempConfigPath()
+
+  fs.writeFileSync(tempPath, content, "utf8")
+  try {
+    fs.chmodSync(tempPath, 0o600)
+  } catch {
+    // Ignore chmod failures on unsupported platforms.
+  }
+
+  try {
+    fs.renameSync(tempPath, PATHS.CONFIG_PATH)
+  } catch (error) {
+    if (isRenameReplaceError(error)) {
+      fs.rmSync(PATHS.CONFIG_PATH, { force: true })
+      fs.renameSync(tempPath, PATHS.CONFIG_PATH)
+    } else {
+      throw error
+    }
+  } finally {
+    try {
+      fs.rmSync(tempPath, { force: true })
+    } catch {
+      // Ignore cleanup failures.
+    }
+  }
+}
+
+function buildTempConfigPath(): string {
+  return path.join(
+    PATHS.APP_DIR,
+    `config.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`,
+  )
+}
+
+function isRenameReplaceError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false
+  }
+
+  const code = (error as { code?: unknown }).code
+  return code === "EEXIST" || code === "EPERM"
 }

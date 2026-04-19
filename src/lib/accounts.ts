@@ -1,6 +1,6 @@
 import consola from "consola"
 
-import { type AccountConfig, getConfig, saveConfig } from "./config"
+import { type AccountConfig, getConfig, updateConfig } from "./config"
 
 export type Account = AccountConfig
 
@@ -16,7 +16,7 @@ function getAccountsSync(): AccountsData {
   const config = getConfig()
   return {
     activeAccountId: config.activeAccountId ?? null,
-    accounts: config.accounts ?? [],
+    accounts: (config.accounts ?? []).map((account) => ({ ...account })),
   }
 }
 
@@ -31,12 +31,11 @@ export function getAccounts(): Promise<AccountsData> {
  * Save accounts data to unified config
  */
 async function saveAccounts(data: AccountsData): Promise<void> {
-  const config = getConfig()
-  await saveConfig({
+  await updateConfig((config) => ({
     ...config,
-    accounts: data.accounts,
+    accounts: [...data.accounts],
     activeAccountId: data.activeAccountId,
-  })
+  }))
 }
 
 /**

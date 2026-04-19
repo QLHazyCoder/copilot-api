@@ -17,7 +17,7 @@ import {
   getUsageLogCountMode,
   isValidReasoningEffort,
   isValidUsageLogCountMode,
-  saveConfig,
+  updateConfig,
   type ModelCardMetadata,
   type ReasoningEffort,
   type UsageLogCountMode,
@@ -504,8 +504,22 @@ async function getPremiumModelConfigSnapshot(): Promise<PremiumModelConfigSnapsh
     Array.isArray(config.hiddenModels) ? config.hiddenModels : undefined
   const multipliers =
     config.premiumModelMultipliers ? { ...config.premiumModelMultipliers } : {}
-  const modelCardMetadata =
-    config.modelCardMetadata ? { ...config.modelCardMetadata } : {}
+  const modelCardMetadata: Record<string, ModelCardMetadata> =
+    config.modelCardMetadata ?
+      Object.fromEntries(
+        Object.entries(config.modelCardMetadata).map(([modelId, metadata]) => [
+          modelId,
+          {
+            ...(typeof metadata.contextWindowTokens === "number" && {
+              contextWindowTokens: metadata.contextWindowTokens,
+            }),
+            ...(metadata.features && {
+              features: [...metadata.features],
+            }),
+          } satisfies ModelCardMetadata,
+        ]),
+      )
+    : {}
   const modelReasoningEfforts =
     config.modelReasoningEfforts ? { ...config.modelReasoningEfforts } : {}
   const normalizedHiddenModels = normalizeStringList(rawHiddenModels)
@@ -565,13 +579,13 @@ async function getPremiumModelConfigSnapshot(): Promise<PremiumModelConfigSnapsh
   }
 
   if (changed) {
-    await saveConfig({
+    await updateConfig((config) => ({
       ...config,
       premiumModelMultipliers: multipliers,
       modelCardMetadata,
       hiddenModels,
       modelReasoningEfforts,
-    })
+    }))
   }
 
   return {
@@ -1098,10 +1112,10 @@ adminRoutes.put("/api/premium-multipliers/:model", async (c) => {
     config.premiumModelMultipliers ? { ...config.premiumModelMultipliers } : {}
   premiumModelMultipliers[modelId] = body.multiplier
 
-  await saveConfig({
+  await updateConfig((config) => ({
     ...config,
     premiumModelMultipliers,
-  })
+  }))
 
   return c.json({ success: true, model: modelId, multiplier: body.multiplier })
 })
@@ -1126,10 +1140,10 @@ adminRoutes.delete("/api/premium-multipliers/:model", async (c) => {
     config.premiumModelMultipliers ? { ...config.premiumModelMultipliers } : {}
   const { [modelId]: _removed, ...premiumModelMultipliers } = currentMultipliers
 
-  await saveConfig({
+  await updateConfig((config) => ({
     ...config,
     premiumModelMultipliers,
-  })
+  }))
 
   return c.json({ success: true, model: modelId })
 })
@@ -1196,10 +1210,10 @@ adminRoutes.put("/api/reasoning-efforts/:model", async (c) => {
     config.modelReasoningEfforts ? { ...config.modelReasoningEfforts } : {}
   modelReasoningEfforts[modelId] = body.effort
 
-  await saveConfig({
+  await updateConfig((config) => ({
     ...config,
     modelReasoningEfforts,
-  })
+  }))
 
   return c.json({
     success: true,
@@ -1247,10 +1261,10 @@ adminRoutes.put("/api/model-visibility/:model", async (c) => {
 
   const hiddenModels = Array.from(hiddenSet)
 
-  await saveConfig({
+  await updateConfig((config) => ({
     ...config,
     hiddenModels,
-  })
+  }))
 
   return c.json({
     success: true,
@@ -1348,7 +1362,7 @@ adminRoutes.put("/api/settings", async (c) => {
 
   const usageLogCountMode = body.usageLogCountMode ?? getUsageLogCountMode()
 
-  await saveConfig({
+  await updateConfig((config) => ({
     ...config,
     auth: {
       ...config.auth,
@@ -1360,7 +1374,7 @@ adminRoutes.put("/api/settings", async (c) => {
     usageTestIntervalMinutes,
     usageLogCountMode,
     anthropicApiKey,
-  })
+  }))
 
   syncRateLimitState(rateLimitSeconds, rateLimitWait)
 
@@ -1443,7 +1457,10 @@ adminRoutes.put("/api/model-mappings/:from", async (c) => {
 
   const config = getConfig()
   const modelMapping = { ...config.modelMapping, [from]: body.to }
-  await saveConfig({ ...config, modelMapping })
+  await updateConfig((config) => ({
+    ...config,
+    modelMapping,
+  }))
   return c.json({ success: true, from, to: body.to })
 })
 
@@ -1459,7 +1476,10 @@ adminRoutes.delete("/api/model-mappings/:from", async (c) => {
   }
 
   const { [from]: _removed, ...rest } = config.modelMapping
-  await saveConfig({ ...config, modelMapping: rest })
+  await updateConfig((config) => ({
+    ...config,
+    modelMapping: rest,
+  }))
   return c.json({ success: true })
 })
 
