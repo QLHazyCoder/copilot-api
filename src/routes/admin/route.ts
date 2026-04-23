@@ -108,6 +108,7 @@ interface AdminSettingsRequestBody {
   rateLimitWait?: boolean
   usageTestIntervalMinutes?: number | null
   usageLogCountMode?: UsageLogCountMode
+  disableHiddenModels?: boolean
   anthropicApiKey?: string | null
   clearAnthropicApiKey?: boolean
   authApiKey?: string | null
@@ -488,6 +489,26 @@ function syncRateLimitState(
     process.env.RATE_LIMIT_WAIT === undefined ?
       rateLimitWait
     : state.rateLimitWait
+}
+
+function buildHiddenModelDisabledValidationError(modelId: string): {
+  error: { message: string; type: "validation_error" }
+} {
+  return {
+    error: {
+      message: `Hidden model is disabled by global policy: ${modelId}`,
+      type: "validation_error",
+    },
+  }
+}
+
+function isHiddenModelBlockedByPolicy(modelId: string): boolean {
+  const config = getConfig()
+  if (config.disableHiddenModels !== true) {
+    return false
+  }
+
+  return normalizeStringList(config.hiddenModels).includes(modelId)
 }
 
 function getModelSupportedReasoningEfforts(model: {
@@ -1287,6 +1308,7 @@ adminRoutes.get("/api/settings", (c) => {
     rateLimitWait: config.rateLimitWait ?? false,
     usageTestIntervalMinutes,
     usageLogCountMode: getUsageLogCountMode(),
+    disableHiddenModels: config.disableHiddenModels ?? false,
     hasAnthropicApiKey: Boolean(config.anthropicApiKey?.trim()),
     hasAuthApiKey: Boolean(authApiKey),
     envOverride: {
@@ -1319,6 +1341,8 @@ adminRoutes.put("/api/settings", async (c) => {
   }
 
   const rateLimitWait = body.rateLimitWait ?? config.rateLimitWait ?? false
+  const disableHiddenModels =
+    body.disableHiddenModels ?? config.disableHiddenModels ?? false
 
   const usageTestIntervalMinutes = resolveUsageTestIntervalMinutes(
     body.usageTestIntervalMinutes,
@@ -1373,6 +1397,7 @@ adminRoutes.put("/api/settings", async (c) => {
     rateLimitWait,
     usageTestIntervalMinutes,
     usageLogCountMode,
+    disableHiddenModels,
     anthropicApiKey,
   }))
 
@@ -1385,6 +1410,7 @@ adminRoutes.put("/api/settings", async (c) => {
       rateLimitWait,
       usageTestIntervalMinutes: usageTestIntervalMinutes ?? null,
       usageLogCountMode,
+      disableHiddenModels,
       hasAnthropicApiKey: Boolean(anthropicApiKey),
       hasAuthApiKey: Boolean(authApiKey),
     },
@@ -1453,6 +1479,10 @@ adminRoutes.put("/api/model-mappings/:from", async (c) => {
       },
       400,
     )
+  }
+
+  if (isHiddenModelBlockedByPolicy(body.to)) {
+    return c.json(buildHiddenModelDisabledValidationError(body.to), 400)
   }
 
   const config = getConfig()

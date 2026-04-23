@@ -2,7 +2,11 @@ import type { Context } from "hono"
 
 import consola from "consola"
 
-import { getAnthropicApiKey, getMappedModel } from "~/lib/config"
+import { getAnthropicApiKey } from "~/lib/config"
+import {
+  buildUnknownModelMessage,
+  resolveModelRequest,
+} from "~/lib/model-routing"
 import { state } from "~/lib/state"
 import { getTokenCount } from "~/lib/tokenizer"
 
@@ -92,10 +96,23 @@ export async function handleCountTokens(c: Context) {
     const anthropicPayload = await c.req.json<AnthropicMessagesPayload>()
     sanitizeAnthropicPayload(anthropicPayload)
 
-    // Apply model mapping so count_tokens uses the same resolved model as /v1/messages
-    const mappedModel = getMappedModel(anthropicPayload.model)
-    anthropicPayload.model = mappedModel
+    const modelResolution = await resolveModelRequest(anthropicPayload.model)
+    anthropicPayload.model = modelResolution.routedModel
 
+    if (!modelResolution.selectedModel) {
+      return c.json(
+        {
+          error: {
+            message: buildUnknownModelMessage(modelResolution),
+            type: "invalid_request_error",
+            code: "model_not_supported",
+          },
+        },
+        400,
+      )
+    }
+
+    const mappedModel = modelResolution.routedModel
     const anthropicApiKey = getAnthropicApiKey()
     if (anthropicApiKey) {
       const tokenCountViaAnthropic = await countTokensViaAnthropic({

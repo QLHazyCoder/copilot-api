@@ -42,6 +42,7 @@ export interface AppConfig {
   premiumModelMultipliers?: Record<string, number>
   modelCardMetadata?: Record<string, ModelCardMetadata>
   hiddenModels?: Array<string>
+  disableHiddenModels?: boolean
   useFunctionApplyPatch?: boolean
   anthropicApiKey?: string
   rateLimitSeconds?: number
@@ -99,6 +100,7 @@ const defaultConfig: AppConfig = {
   },
   modelCardMetadata: {},
   hiddenModels: [],
+  disableHiddenModels: false,
   rateLimitWait: false,
   usageTestIntervalMinutes: 10,
   usageLogCountMode: "request",
@@ -352,6 +354,19 @@ export function getReasoningEffortForModel(model: string): ReasoningEffort {
 export function getMappedModel(model: string): string {
   const config = getConfig()
   return config.modelMapping?.[model] ?? model
+}
+
+export function isModelHidden(model: string): boolean {
+  const hiddenModels = getConfig().hiddenModels ?? []
+  return hiddenModels.includes(model)
+}
+
+export function shouldDisableHiddenModels(): boolean {
+  return getConfig().disableHiddenModels ?? false
+}
+
+export function isHiddenModelDisabled(model: string): boolean {
+  return shouldDisableHiddenModels() && isModelHidden(model)
 }
 
 export function getAnthropicApiKey(): string | undefined {

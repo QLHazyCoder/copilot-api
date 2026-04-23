@@ -163,6 +163,45 @@ export const adminHtml = `<!DOCTYPE html>
       justify-content: flex-end;
       flex-wrap: wrap;
     }
+    .models-header-policy-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.35rem 0.65rem;
+      border: 1px solid rgba(53, 80, 107, 0.72);
+      border-radius: var(--radius-sm);
+      background: rgba(12, 21, 31, 0.58);
+      min-height: 32px;
+    }
+    .models-header-policy-copy {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.1rem;
+    }
+    .models-header-policy-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      border: 1px solid rgba(63, 96, 131, 0.72);
+      background: rgba(20, 33, 46, 0.9);
+      color: var(--text-secondary);
+      font-size: 0.66rem;
+      font-weight: 600;
+      line-height: 1;
+      padding: 0.16rem 0.42rem;
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .models-header-policy-title {
+      color: var(--text-primary);
+      font-size: 0.76rem;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
     .models-action-btn {
       width: 70px;
       justify-content: center;
@@ -448,7 +487,27 @@ export const adminHtml = `<!DOCTYPE html>
       border-color: rgba(74, 219, 196, 0.88);
       background: rgba(29, 106, 95, 0.48);
     }
-    .model-premium-badge { font-size: 0.7rem; line-height: 1; border-radius: 9999px; padding: 0.18rem 0.45rem; color: #f4e7ff; background: rgba(145, 81, 255, 0.9); border: 1px solid rgba(200, 165, 255, 0.85); }
+    .model-premium-badge,
+    .model-card-state-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 0.18rem 0.45rem;
+      font-size: 0.68rem;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .model-premium-badge {
+      border: 1px solid rgba(212, 165, 59, 0.48);
+      background: rgba(90, 67, 23, 0.34);
+      color: #f3d179;
+    }
+    .model-card-state-badge {
+      border: 1px solid rgba(74, 219, 196, 0.4);
+      background: rgba(29, 106, 95, 0.24);
+      color: #b9f3ea;
+    }
     .model-multiplier { font-weight: 600; font-size: 0.875rem; white-space: nowrap; cursor: text; user-select: none; }
     .model-multiplier.paid { color: #f3d179; }
     .model-multiplier.free { color: var(--text-secondary); }
@@ -1254,6 +1313,16 @@ export const adminHtml = `<!DOCTYPE html>
         <div class="card-header models-card-header">
           <span class="card-title" data-i18n="models.availableModels">Available Models</span>
           <div class="models-header-actions">
+            <label class="models-header-policy-toggle" for="disableHiddenModelsToggle">
+              <span class="models-header-policy-copy">
+                <span class="models-header-policy-badge" data-i18n="models.hiddenPolicyBadge">Global</span>
+                <span class="models-header-policy-title" data-i18n="models.disableHiddenModels">Hidden models are disabled</span>
+              </span>
+              <span class="settings-switch">
+                <input id="disableHiddenModelsToggle" type="checkbox">
+                <span class="settings-switch-slider"></span>
+              </span>
+            </label>
             <button class="btn btn-sm models-action-btn model-visibility-toggle" id="modelVisibilityToggle" type="button">
               <span class="models-action-icon" id="modelVisibilityToggleIcon">
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 3C4.5 3 2.3 5.2 1.2 7.2a1.6 1.6 0 0 0 0 1.6C2.3 10.8 4.5 13 8 13s5.7-2.2 6.8-4.2a1.6 1.6 0 0 0 0-1.6C13.7 5.2 11.5 3 8 3Zm0 8.7A3.7 3.7 0 1 1 8 4.3a3.7 3.7 0 0 1 0 7.4Zm0-5.9a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"></path></svg>

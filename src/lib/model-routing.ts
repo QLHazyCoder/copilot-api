@@ -1,6 +1,6 @@
 import type { Model } from "~/services/copilot/get-models"
 
-import { getMappedModel } from "./config"
+import { getMappedModel, isHiddenModelDisabled } from "./config"
 import { runtimeManager } from "./runtime-manager"
 
 const CHAT_COMPLETIONS_ENDPOINT = "/chat/completions"
@@ -21,12 +21,15 @@ export interface ModelEndpointCapabilities {
   hasEndpointMetadata: boolean
 }
 
+export type ModelUnavailabilityReason = "hidden_model_disabled"
+
 export interface ResolvedModelRequest {
   requestedModel: string
   configuredModel: string
   routedModel: string
   selectedModel: Model | undefined
   capabilities: ModelEndpointCapabilities
+  unavailableReason?: ModelUnavailabilityReason
 }
 
 export async function resolveModelRequest(
@@ -34,6 +37,7 @@ export async function resolveModelRequest(
 ): Promise<ResolvedModelRequest> {
   const configuredModel = getMappedModel(requestedModel)
   let models = runtimeManager.getCurrentModels()
+  let unavailableReason: ModelUnavailabilityReason | undefined
 
   let resolvedModel = findModelFromModels(
     models?.data,
@@ -49,6 +53,14 @@ export async function resolveModelRequest(
     )
   }
 
+  if (resolvedModel.model && isHiddenModelDisabled(resolvedModel.routedModel)) {
+    unavailableReason = "hidden_model_disabled"
+    resolvedModel = {
+      model: undefined,
+      routedModel: resolvedModel.routedModel,
+    }
+  }
+
   return {
     requestedModel,
     configuredModel,
@@ -57,6 +69,7 @@ export async function resolveModelRequest(
     capabilities: getModelEndpointCapabilities(
       resolvedModel.model?.supported_endpoints,
     ),
+    unavailableReason,
   }
 }
 
@@ -88,9 +101,17 @@ export function getModelEndpointCapabilities(
 export function buildUnknownModelMessage(
   resolution: Pick<
     ResolvedModelRequest,
-    "requestedModel" | "configuredModel" | "routedModel"
+    "requestedModel" | "configuredModel" | "routedModel" | "unavailableReason"
   >,
 ): string {
+  if (resolution.unavailableReason === "hidden_model_disabled") {
+    if (resolution.requestedModel === resolution.routedModel) {
+      return `Model unavailable: ${resolution.requestedModel}. This model is hidden and disabled by global policy. Check /v1/models or change the Hidden Models policy in /admin.`
+    }
+
+    return `Model unavailable: ${resolution.requestedModel}. It resolves to hidden model ${resolution.routedModel}, which is disabled by global policy. Check /v1/models or change the Hidden Models policy in /admin.`
+  }
+
   if (
     resolution.requestedModel === resolution.configuredModel
     && resolution.configuredModel === resolution.routedModel

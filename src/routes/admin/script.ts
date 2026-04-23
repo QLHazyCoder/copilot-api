@@ -26,6 +26,7 @@ export const adminScript = `<script>
     let reasoningEfforts = {};
     let modelSupportedReasoningEfforts = {};
     let hiddenModels = new Set();
+    let disableHiddenModels = false;
     let modelVisibilityFilter = 'visible';
     let isModelManageMode = false;
     let latestModelsPayload = null;
@@ -480,6 +481,7 @@ export const adminScript = `<script>
         rawRateLimitSeconds,
         rateLimitSeconds,
         rateLimitWait,
+        disableHiddenModels,
         anthropicApiKey,
         gatewayApiKey
       };
@@ -489,6 +491,7 @@ export const adminScript = `<script>
       if (!left || !right) return false;
       return left.rateLimitSeconds === right.rateLimitSeconds
         && left.rateLimitWait === right.rateLimitWait
+        && left.disableHiddenModels === right.disableHiddenModels
         && left.anthropicApiKey === right.anthropicApiKey
         && left.gatewayApiKey === right.gatewayApiKey;
     }
@@ -516,6 +519,12 @@ export const adminScript = `<script>
         const data = await res.json();
         document.getElementById('rateLimitSeconds').value = data.rateLimitSeconds ?? '';
         document.getElementById('rateLimitWait').checked = Boolean(data.rateLimitWait);
+        disableHiddenModels = Boolean(data.disableHiddenModels);
+        const disableHiddenModelsToggle = document.getElementById('disableHiddenModelsToggle');
+        if (disableHiddenModelsToggle) {
+          disableHiddenModelsToggle.checked = disableHiddenModels;
+          disableHiddenModelsToggle.disabled = false;
+        }
         document.getElementById('anthropicApiKey').value = '';
         document.getElementById('gatewayApiKey').value = '';
         const anthropicApiKeyStatusEl = document.getElementById('anthropicApiKeyStatus');
@@ -540,6 +549,7 @@ export const adminScript = `<script>
               null
             : Number(data.rateLimitSeconds),
           rateLimitWait: Boolean(data.rateLimitWait),
+          disableHiddenModels,
           anthropicApiKey: '',
           gatewayApiKey: ''
         };
@@ -557,6 +567,10 @@ export const adminScript = `<script>
         updateSettingsDirtyState();
       } catch (_error) {
         settingsLoadedState = null;
+        const disableHiddenModelsToggle = document.getElementById('disableHiddenModelsToggle');
+        if (disableHiddenModelsToggle) {
+          disableHiddenModelsToggle.disabled = false;
+        }
         document.getElementById('settingsNotice').textContent = t('settings.failedLoad');
         updateSettingsDirtyState();
       }
@@ -578,7 +592,8 @@ export const adminScript = `<script>
       try {
         const requestBody = {
           rateLimitSeconds: currentState.rateLimitSeconds,
-          rateLimitWait: currentState.rateLimitWait
+          rateLimitWait: currentState.rateLimitWait,
+          disableHiddenModels: currentState.disableHiddenModels
         };
         if (currentState.anthropicApiKey !== '') {
           requestBody.anthropicApiKey = currentState.anthropicApiKey;
@@ -602,6 +617,56 @@ export const adminScript = `<script>
       } catch (_error) {
         alert(t('settings.failedSave'));
         updateSettingsDirtyState();
+      }
+    }
+
+    async function saveDisableHiddenModels(nextValue) {
+      const toggle = document.getElementById('disableHiddenModelsToggle');
+      const previousValue = disableHiddenModels;
+      disableHiddenModels = Boolean(nextValue);
+
+      if (toggle) {
+        toggle.checked = disableHiddenModels;
+        toggle.disabled = true;
+      }
+
+      try {
+        const res = await fetch(API_BASE + '/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ disableHiddenModels })
+        });
+        const data = await res.json().catch(function () { return {}; });
+
+        if (!res.ok) {
+          throw new Error(data.error?.message || t('settings.failedSave'));
+        }
+
+        if (settingsLoadedState) {
+          settingsLoadedState = {
+            ...settingsLoadedState,
+            disableHiddenModels
+          };
+        }
+
+        rerenderModelsFromCache();
+        const mappingFormArea = document.getElementById('mappingFormArea');
+        if (mappingFormArea && mappingFormArea.classList.contains('active')) {
+          await loadModelOptions();
+        }
+        updateSettingsDirtyState();
+      } catch (error) {
+        disableHiddenModels = previousValue;
+        if (toggle) {
+          toggle.checked = previousValue;
+        }
+        rerenderModelsFromCache();
+        updateSettingsDirtyState();
+        alert(error instanceof Error ? error.message : t('settings.failedSave'));
+      } finally {
+        if (toggle) {
+          toggle.disabled = false;
+        }
       }
     }
 
@@ -1284,6 +1349,10 @@ export const adminScript = `<script>
       return hiddenModels.has(modelId);
     }
 
+    function isModelEffectivelyDisabled(modelId) {
+      return disableHiddenModels && isModelHidden(modelId);
+    }
+
     function shouldDisplayModel(modelId) {
       return modelVisibilityFilter === 'hidden' ? isModelHidden(modelId) : !isModelHidden(modelId);
     }
@@ -1506,7 +1575,10 @@ export const adminScript = `<script>
           + '</select>'
           + '</label>'
         : '';
-      const reasoningRightMarkup = reasoningSelectorMarkup;
+      const hiddenDisabledBadgeMarkup = isModelEffectivelyDisabled(model.id)
+        ? '<span class="model-card-state-badge">' + escapeHtml(t('models.hiddenDisabled')) + '</span>'
+        : '';
+      const reasoningRightMarkup = hiddenDisabledBadgeMarkup + reasoningSelectorMarkup;
 
       return '<div class="model-card' + (isHiddenModel ? ' hidden-model' : '') + '">'
         + '<div class="model-top">'
@@ -1686,9 +1758,13 @@ export const adminScript = `<script>
       const btn = document.getElementById('refreshModels');
       btn.classList.add('loading');
       try {
-        const [modelsRes, premiumConfig] = await Promise.all([
+        const settingsPromise = fetch(API_BASE + '/settings')
+          .then(function (res) { return res.json(); })
+          .catch(function () { return null; });
+        const [modelsRes, premiumConfig, settingsData] = await Promise.all([
           fetch(API_BASE + '/models'),
-          fetchPremiumMultipliers()
+          fetchPremiumMultipliers(),
+          settingsPromise
         ]);
         const data = await modelsRes.json();
         premiumMultipliers = premiumConfig.multipliers;
@@ -1696,6 +1772,20 @@ export const adminScript = `<script>
         reasoningEfforts = premiumConfig.reasoningEfforts;
         modelSupportedReasoningEfforts = premiumConfig.modelSupportedReasoningEfforts;
         hiddenModels = new Set(premiumConfig.hiddenModels);
+        if (settingsData) {
+          disableHiddenModels = Boolean(settingsData.disableHiddenModels);
+          const disableHiddenModelsToggle = document.getElementById('disableHiddenModelsToggle');
+          if (disableHiddenModelsToggle) {
+            disableHiddenModelsToggle.checked = disableHiddenModels;
+            disableHiddenModelsToggle.disabled = false;
+          }
+          if (settingsLoadedState) {
+            settingsLoadedState = {
+              ...settingsLoadedState,
+              disableHiddenModels
+            };
+          }
+        }
         latestModelsPayload = data;
         renderModels(latestModelsPayload);
       } catch (_error) {
@@ -2676,10 +2766,35 @@ export const adminScript = `<script>
     async function loadModelOptions() {
       const sel = document.getElementById('mappingTo');
       try {
-        const res = await fetch(API_BASE + '/models');
+        const settingsPromise = fetch(API_BASE + '/settings')
+          .then(function (res) { return res.json(); })
+          .catch(function () { return null; });
+        const [res, premiumConfig, settingsData] = await Promise.all([
+          fetch(API_BASE + '/models'),
+          fetchPremiumMultipliers(),
+          settingsPromise
+        ]);
         const data = await res.json();
+        hiddenModels = new Set(premiumConfig.hiddenModels);
+        if (settingsData) {
+          disableHiddenModels = Boolean(settingsData.disableHiddenModels);
+          const disableHiddenModelsToggle = document.getElementById('disableHiddenModelsToggle');
+          if (disableHiddenModelsToggle) {
+            disableHiddenModelsToggle.checked = disableHiddenModels;
+            disableHiddenModelsToggle.disabled = false;
+          }
+          if (settingsLoadedState) {
+            settingsLoadedState = {
+              ...settingsLoadedState,
+              disableHiddenModels
+            };
+          }
+        }
+        const availableModels = (data.data || []).filter(function (model) {
+          return !(disableHiddenModels && hiddenModels.has(model.id));
+        });
         sel.innerHTML = '<option value="">' + t('mappings.selectTargetModel') + '</option>' +
-          (data.data || []).map(function (m) { return '<option value="' + m.id + '">' + m.id + '</option>'; }).join('');
+          availableModels.map(function (m) { return '<option value="' + m.id + '">' + m.id + '</option>'; }).join('');
       } catch (_error) {
         sel.innerHTML = '<option value="">' + t('mappings.failedLoadModels') + '</option>';
       }
@@ -2719,6 +2834,13 @@ export const adminScript = `<script>
       const nextFilter = modelVisibilityFilter === 'hidden' ? 'visible' : 'hidden';
       setModelVisibilityFilter(nextFilter, true);
       rerenderModelsFromCache();
+    });
+    document.getElementById('disableHiddenModelsToggle').addEventListener('change', function (event) {
+      const target = event.target;
+      if (!target) {
+        return;
+      }
+      void saveDisableHiddenModels(Boolean(target.checked));
     });
     document.getElementById('refreshUsage').addEventListener('click', fetchUsage);
     document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
