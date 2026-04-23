@@ -20,7 +20,9 @@ modelRoutes.get("/", async (c) => {
     const shouldFilterHiddenModels = shouldDisableHiddenModels()
 
     const models = modelsResponse?.data
-      .filter((model) => !shouldFilterHiddenModels || !hiddenModels.has(model.id))
+      .filter(
+        (model) => !shouldFilterHiddenModels || !hiddenModels.has(model.id),
+      )
       .map((model) => ({
         id: model.id,
         object: "model",
@@ -40,4 +42,3 @@ modelRoutes.get("/", async (c) => {
     return await forwardError(c, error)
   }
 })
-
