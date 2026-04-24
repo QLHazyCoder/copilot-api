@@ -16,16 +16,11 @@ const authPageMessages: Record<AuthPageLocale, AuthPageMessages> = {
     "language.en": "English",
     "language.zhCN": "Simplified Chinese",
     "common.managementSecret": "Management Secret",
-    "common.requiresHttpsNote":
-      "Public admin access requires HTTPS. Localhost access remains available for setup and development.",
     "login.pageTitle": "Copilot API - Admin Login",
     "login.badge": "Admin Access",
-    "login.title": "Management Secret Login",
+    "login.title": "Admin Console Login",
     "login.description":
       "Enter the management secret to access the copilot-api admin dashboard.",
-    "login.scope": "Scope",
-    "login.scopeValue":
-      "Admin page and all /admin/api/* routes",
     "login.submit": "Sign In",
     "login.error.required": "Management secret is required.",
     "login.error.failed": "Failed to sign in.",
@@ -66,16 +61,11 @@ const authPageMessages: Record<AuthPageLocale, AuthPageMessages> = {
     "language.en": "English",
     "language.zhCN": "简体中文",
     "common.managementSecret": "管理密钥",
-    "common.requiresHttpsNote":
-      "公网访问 Admin 页面时必须使用 HTTPS。localhost 本地初始化和开发访问不受影响。",
     "login.pageTitle": "Copilot API - Admin 登录",
     "login.badge": "管理入口",
-    "login.title": "管理密钥登录",
+    "login.title": "管理端登录",
     "login.description":
       "请输入管理密钥以访问 copilot-api 的后台管理页面。",
-    "login.scope": "作用范围",
-    "login.scopeValue":
-      "Admin 页面与全部 /admin/api/* 路由",
     "login.submit": "登录",
     "login.error.required": "请输入管理密钥。",
     "login.error.failed": "登录失败。",
@@ -230,13 +220,8 @@ export function renderAuthPageLocaleScript(options: {
       setText('pageBadge', t('login.badge'));
       setText('pageTitleText', t('login.title'));
       setText('pageDescription', t('login.description'));
-      setText('scopeLabel', t('login.scope'));
-      setText('scopeValue', t('login.scopeValue'));
       setText('secretLabel', t('common.managementSecret'));
       setText('submitButtonText', t('login.submit'));
-      if (AUTH_PAGE_CONFIG.requiresHttps) {
-        setText('httpsNote', t('common.requiresHttpsNote'));
-      }
     }
 
     function applySetupLocale() {

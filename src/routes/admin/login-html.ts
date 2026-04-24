@@ -20,10 +20,6 @@ export function renderAdminLoginHtml(options: {
   requiresHttps: boolean
 }): string {
   const messages = getAuthPageMessages(options.locale)
-  const requiresHttpsNote =
-    options.requiresHttps ?
-      `<p class="hint" id="httpsNote">${escapeHtml(messages["common.requiresHttpsNote"])}</p>`
-    : `<p class="hint" id="httpsNote" style="display:none"></p>`
 
   return `<!DOCTYPE html>
 <html lang="${escapeHtml(options.locale)}">
@@ -61,7 +57,7 @@ export function renderAdminLoginHtml(options: {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
       .panel {
-        width: min(420px, 100%);
+        width: min(520px, 100%);
         border: 1px solid var(--border-default);
         border-radius: var(--radius-md);
         background: linear-gradient(180deg, rgba(27, 42, 59, 0.96), var(--bg-panel));
@@ -123,6 +119,10 @@ export function renderAdminLoginHtml(options: {
         display: grid;
         gap: 8px;
         font-size: 14px;
+      }
+      #loginForm {
+        display: grid;
+        gap: 18px;
       }
       input {
         width: 100%;
@@ -198,10 +198,6 @@ export function renderAdminLoginHtml(options: {
         <p id="pageDescription">${escapeHtml(messages["login.description"])}</p>
       </section>
       <section class="panel-body">
-        <div class="meta">
-          <p><strong id="scopeLabel">${escapeHtml(messages["login.scope"])}</strong>: <span id="scopeValue">${escapeHtml(messages["login.scopeValue"])}</span></p>
-        </div>
-        ${requiresHttpsNote}
         <div class="error" id="errorBox" role="alert"></div>
         <form id="loginForm">
           <label for="adminSecret">
