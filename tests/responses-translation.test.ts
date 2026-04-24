@@ -2,7 +2,6 @@ import { describe, expect, it } from "bun:test"
 
 import type { AnthropicMessagesPayload } from "~/routes/messages/anthropic-types"
 import type {
-  ResponseInputMessage,
   ResponsesResult,
 } from "~/services/copilot/create-responses"
 
@@ -50,16 +49,41 @@ describe("translateAnthropicMessagesToResponsesPayload", () => {
   it("converts anthropic text blocks into response input messages", () => {
     const result = translateAnthropicMessagesToResponsesPayload(samplePayload)
 
-    expect(Array.isArray(result.input)).toBe(true)
-    const input = result.input as Array<ResponseInputMessage>
+    if (!Array.isArray(result.input)) {
+      throw new Error("expected input array")
+    }
+
+    const input = result.input
     expect(input).toHaveLength(1)
 
     const message = input[0]
-    expect(message.role).toBe("user")
-    expect(Array.isArray(message.content)).toBe(true)
+    if (
+      !message
+      || typeof message !== "object"
+      || !("role" in message)
+      || message.role !== "user"
+      || !("type" in message)
+      || message.type !== "message"
+      || !("content" in message)
+      || !Array.isArray(message.content)
+    ) {
+      throw new Error("expected user message with content array")
+    }
 
-    const content = message.content as Array<{ text: string }>
-    expect(content.map((item) => item.text)).toEqual([
+    const textContent = message.content.flatMap((item) => {
+      if (
+        item
+        && typeof item === "object"
+        && "text" in item
+        && typeof item.text === "string"
+      ) {
+        return [item.text]
+      }
+
+      return []
+    })
+
+    expect(textContent).toEqual([
       "<system-reminder>\nThis is a reminder that your todo list is currently empty. DO NOT mention this to the user explicitly because they are already aware. If you are working on tasks that would benefit from a todo list please use the TodoWrite tool to create one. If not, please feel free to ignore. Again do not mention this message to the user.\n</system-reminder>",
       "<system-reminder>\nAs you answer the user's questions, you can use the following context:\n# important-instruction-reminders\nDo what has been asked; nothing more, nothing less.\nNEVER create files unless they're absolutely necessary for achieving your goal.\nALWAYS prefer editing an existing file to creating a new one.\nNEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.\n\n      \n      IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.\n</system-reminder>",
       "hi",
