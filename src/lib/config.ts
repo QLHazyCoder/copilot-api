@@ -33,8 +33,15 @@ export interface AuthConfig {
   apiKeys?: Array<string>
 }
 
+export interface AdminAuthConfig {
+  secretHash?: string
+  sessionTtlDays?: number
+  enforceHttps?: boolean
+}
+
 export interface AppConfig {
   auth?: AuthConfig
+  adminAuth?: AdminAuthConfig
   extraPrompts?: Record<string, string>
   smallModel?: string
   modelReasoningEfforts?: Record<string, ReasoningEffort>
@@ -70,6 +77,10 @@ const gpt5ExplorationPrompt = `## Exploration and reading files
 
 const defaultConfig: AppConfig = {
   auth: {},
+  adminAuth: {
+    sessionTtlDays: 5,
+    enforceHttps: true,
+  },
   extraPrompts: {
     "gpt-5-mini": gpt5ExplorationPrompt,
     "gpt-5.1-codex-max": gpt5ExplorationPrompt,
@@ -258,19 +269,72 @@ function mergeDefaultUsageLogCountMode(config: AppConfig): {
   }
 }
 
+function normalizeAdminAuthConfig(
+  adminAuth: AdminAuthConfig | undefined,
+): AdminAuthConfig {
+  const sessionTtlDays =
+    typeof adminAuth?.sessionTtlDays === "number"
+    && Number.isFinite(adminAuth.sessionTtlDays)
+    && adminAuth.sessionTtlDays > 0
+    && Number.isInteger(adminAuth.sessionTtlDays) ?
+      adminAuth.sessionTtlDays
+    : (defaultConfig.adminAuth?.sessionTtlDays ?? 5)
+
+  const enforceHttps =
+    typeof adminAuth?.enforceHttps === "boolean" ?
+      adminAuth.enforceHttps
+    : (defaultConfig.adminAuth?.enforceHttps ?? true)
+
+  const secretHash = adminAuth?.secretHash?.trim() || undefined
+
+  return {
+    ...(secretHash && { secretHash }),
+    sessionTtlDays,
+    enforceHttps,
+  }
+}
+
+function mergeDefaultAdminAuthConfig(config: AppConfig): {
+  mergedConfig: AppConfig
+  changed: boolean
+} {
+  const normalizedAdminAuth = normalizeAdminAuthConfig(config.adminAuth)
+  const currentSecretHash = config.adminAuth?.secretHash?.trim() || undefined
+  const changed =
+    currentSecretHash !== normalizedAdminAuth.secretHash
+    || config.adminAuth?.sessionTtlDays !== normalizedAdminAuth.sessionTtlDays
+    || config.adminAuth?.enforceHttps !== normalizedAdminAuth.enforceHttps
+
+  if (!changed) {
+    return { mergedConfig: config, changed: false }
+  }
+
+  return {
+    mergedConfig: {
+      ...config,
+      adminAuth: normalizedAdminAuth,
+    },
+    changed: true,
+  }
+}
+
 export function mergeConfigWithDefaults(): AppConfig {
   const config = readConfigFromDisk()
   const extraPromptMergeResult = mergeDefaultExtraPrompts(config)
   const premiumMultiplierMergeResult = mergeDefaultPremiumModelMultipliers(
     extraPromptMergeResult.mergedConfig,
   )
-  const usageLogCountModeMergeResult = mergeDefaultUsageLogCountMode(
+  const adminAuthMergeResult = mergeDefaultAdminAuthConfig(
     premiumMultiplierMergeResult.mergedConfig,
+  )
+  const usageLogCountModeMergeResult = mergeDefaultUsageLogCountMode(
+    adminAuthMergeResult.mergedConfig,
   )
   const mergedConfig = usageLogCountModeMergeResult.mergedConfig
   const changed =
     extraPromptMergeResult.changed
     || premiumMultiplierMergeResult.changed
+    || adminAuthMergeResult.changed
     || usageLogCountModeMergeResult.changed
 
   let effectiveConfig = mergedConfig
@@ -387,6 +451,7 @@ export function getUsageLogCountMode(): UsageLogCountMode {
 function normalizeConfig(config: AppConfig | ReadonlyAppConfig): AppConfig {
   return {
     ...cloneConfig(config),
+    adminAuth: normalizeAdminAuthConfig(config.adminAuth),
     usageLogCountMode: normalizeUsageLogCountMode(config.usageLogCountMode),
   } satisfies AppConfig
 }

@@ -15,6 +15,7 @@ export const adminScript = `<script>
   const KNOWN_TABS = ['accounts', 'settings', 'models', 'usage', 'model-mappings', 'manual'];
 
     const messages = ${JSON.stringify(adminMessages)};
+    const nativeFetch = window.fetch.bind(window);
 
     let pollInterval = null;
     let currentInterval = 5;
@@ -49,6 +50,32 @@ export const adminScript = `<script>
     let settingsLoadedState = null;
     let confirmActionResolve = null;
     let toastTimer = null;
+    let adminSessionState = null;
+    let isAdminRedirectPending = false;
+
+    async function adminFetch(input, init) {
+      const response = await nativeFetch(input, init);
+
+      if (response.status === 401) {
+        if (!isAdminRedirectPending) {
+          isAdminRedirectPending = true;
+          window.location.href = '/admin/login';
+        }
+        throw new Error('admin_auth_required');
+      }
+
+      if (response.status === 428) {
+        if (!isAdminRedirectPending) {
+          isAdminRedirectPending = true;
+          window.location.href = '/admin/setup';
+        }
+        throw new Error('admin_setup_required');
+      }
+
+      return response;
+    }
+
+    const fetch = adminFetch;
 
     function normalizeLocale(locale) {
       if (!locale || typeof locale !== 'string') return null;
@@ -101,6 +128,106 @@ export const adminScript = `<script>
       if (accountType === 'business') return t('auth.typeBusiness');
       if (accountType === 'enterprise') return t('auth.typeEnterprise');
       return t('auth.typeIndividual');
+    }
+
+    function getAdminSecretSourceLabel(secretSource) {
+      if (secretSource === 'env-hash') return t('settings.adminSecretSourceEnvHash');
+      if (secretSource === 'env-secret') return t('settings.adminSecretSourceEnv');
+      if (secretSource === 'config-hash') return t('settings.adminSecretSourceConfig');
+      return t('settings.adminSecretSourceNone');
+    }
+
+    function updateAdminSessionUI() {
+      const logoutButton = document.getElementById('adminLogoutBtn');
+      if (!logoutButton) {
+        return;
+      }
+
+      const isAuthenticated = Boolean(adminSessionState && adminSessionState.authenticated);
+      logoutButton.disabled = !isAuthenticated;
+      logoutButton.title = isAuthenticated && adminSessionState.expiresAt
+        ? t('settings.adminLogoutHint', { expiresAt: formatDateTime(adminSessionState.expiresAt) })
+        : t('settings.adminLogoutDisabled');
+    }
+
+    function renderAdminSecurityInfo(adminAuth) {
+      const statusEl = document.getElementById('adminSecurityStatus');
+      const summaryEl = document.getElementById('adminSecuritySummary');
+      const manageLink = document.getElementById('manageAdminSecretLink');
+
+      if (!statusEl || !summaryEl || !manageLink) {
+        return;
+      }
+
+      const configured = Boolean(adminAuth && adminAuth.configured);
+      const sourceLabel = getAdminSecretSourceLabel(adminAuth?.secretSource);
+      const httpsLabel = adminAuth?.enforceHttps
+        ? t('settings.adminHttpsRequired')
+        : t('settings.adminHttpsOptional');
+
+      statusEl.textContent = configured
+        ? t('settings.adminSecurityStatusConfigured')
+        : t('settings.adminSecurityStatusSetupRequired');
+      statusEl.classList.toggle('is-set', configured);
+      statusEl.classList.toggle('is-unset', !configured);
+
+      summaryEl.textContent = t('settings.adminSecuritySummary', {
+        source: sourceLabel,
+        https: httpsLabel
+      });
+
+      manageLink.textContent = configured
+        ? t('settings.manageAdminSecret')
+        : t('settings.setupAdminSecret');
+    }
+
+    async function fetchAdminSessionState() {
+      try {
+        const response = await nativeFetch(API_BASE + '/session');
+        const payload = await response.json().catch(function () { return null; });
+        adminSessionState = payload;
+      } catch (_error) {
+        adminSessionState = null;
+      }
+
+      updateAdminSessionUI();
+    }
+
+    async function logoutAdminSession() {
+      const shouldLogout = await openConfirmActionModal({
+        title: t('settings.adminLogout'),
+        message: t('settings.adminLogoutConfirmMessage'),
+        confirmText: t('settings.adminLogout'),
+        tone: 'danger'
+      });
+      if (!shouldLogout) {
+        return;
+      }
+
+      const logoutButton = document.getElementById('adminLogoutBtn');
+      if (logoutButton) {
+        logoutButton.disabled = true;
+      }
+
+      try {
+        const response = await adminFetch(API_BASE + '/session/logout', {
+          method: 'POST'
+        });
+        const payload = await response.json().catch(function () { return {}; });
+        if (!response.ok) {
+          alert(payload.error?.message || t('settings.adminLogoutFailed'));
+          updateAdminSessionUI();
+          return;
+        }
+
+        window.location.href = '/admin/login';
+      } catch (error) {
+        if (error instanceof Error && (error.message === 'admin_auth_required' || error.message === 'admin_setup_required')) {
+          return;
+        }
+        alert(t('settings.adminLogoutFailed'));
+        updateAdminSessionUI();
+      }
     }
 
     function normalizeModelVisibilityFilter(value) {
@@ -351,6 +478,7 @@ export const adminScript = `<script>
       if (languageSelect) languageSelect.value = currentLocale;
       updateModelVisibilityToggleButton();
       updateModelManageButton();
+      updateAdminSessionUI();
     }
 
     function refreshLocalizedData() {
@@ -474,12 +602,16 @@ export const adminScript = `<script>
     function readSettingsFormState() {
       const rawRateLimitSeconds = document.getElementById('rateLimitSeconds').value.trim();
       const rateLimitSeconds = rawRateLimitSeconds === '' ? null : Number(rawRateLimitSeconds);
+      const rawAdminSessionTtlDays = document.getElementById('adminSessionTtlDays').value.trim();
+      const adminSessionTtlDays = rawAdminSessionTtlDays === '' ? null : Number(rawAdminSessionTtlDays);
       const rateLimitWait = document.getElementById('rateLimitWait').checked;
       const anthropicApiKey = document.getElementById('anthropicApiKey').value.trim();
       const gatewayApiKey = document.getElementById('gatewayApiKey').value.trim();
       return {
         rawRateLimitSeconds,
         rateLimitSeconds,
+        rawAdminSessionTtlDays,
+        adminSessionTtlDays,
         rateLimitWait,
         disableHiddenModels,
         anthropicApiKey,
@@ -490,6 +622,7 @@ export const adminScript = `<script>
     function isSameSettingsState(left, right) {
       if (!left || !right) return false;
       return left.rateLimitSeconds === right.rateLimitSeconds
+        && left.adminSessionTtlDays === right.adminSessionTtlDays
         && left.rateLimitWait === right.rateLimitWait
         && left.disableHiddenModels === right.disableHiddenModels
         && left.anthropicApiKey === right.anthropicApiKey
@@ -518,6 +651,7 @@ export const adminScript = `<script>
         const res = await fetch(API_BASE + '/settings');
         const data = await res.json();
         document.getElementById('rateLimitSeconds').value = data.rateLimitSeconds ?? '';
+        document.getElementById('adminSessionTtlDays').value = data.adminSessionTtlDays ?? '';
         document.getElementById('rateLimitWait').checked = Boolean(data.rateLimitWait);
         disableHiddenModels = Boolean(data.disableHiddenModels);
         const disableHiddenModelsToggle = document.getElementById('disableHiddenModelsToggle');
@@ -543,11 +677,17 @@ export const adminScript = `<script>
         gatewayApiKeyStatusEl.classList.toggle('is-set', hasAuthApiKey);
         gatewayApiKeyStatusEl.classList.toggle('is-unset', !hasAuthApiKey);
 
+        renderAdminSecurityInfo(data.adminAuth);
+
         settingsLoadedState = {
           rateLimitSeconds:
             data.rateLimitSeconds === null || data.rateLimitSeconds === undefined ?
               null
             : Number(data.rateLimitSeconds),
+          adminSessionTtlDays:
+            data.adminSessionTtlDays === null || data.adminSessionTtlDays === undefined ?
+              null
+            : Number(data.adminSessionTtlDays),
           rateLimitWait: Boolean(data.rateLimitWait),
           disableHiddenModels,
           anthropicApiKey: '',
@@ -571,6 +711,7 @@ export const adminScript = `<script>
         if (disableHiddenModelsToggle) {
           disableHiddenModelsToggle.disabled = false;
         }
+        renderAdminSecurityInfo(null);
         document.getElementById('settingsNotice').textContent = t('settings.failedLoad');
         updateSettingsDirtyState();
       }
@@ -588,10 +729,23 @@ export const adminScript = `<script>
         return;
       }
 
+      if (
+        currentState.rawAdminSessionTtlDays !== ''
+        && (
+          !Number.isFinite(currentState.adminSessionTtlDays)
+          || currentState.adminSessionTtlDays <= 0
+          || !Number.isInteger(currentState.adminSessionTtlDays)
+        )
+      ) {
+        alert(t('settings.validationAdminSessionTtlDays'));
+        return;
+      }
+
       btn.disabled = true;
       try {
         const requestBody = {
           rateLimitSeconds: currentState.rateLimitSeconds,
+          adminSessionTtlDays: currentState.adminSessionTtlDays,
           rateLimitWait: currentState.rateLimitWait,
           disableHiddenModels: currentState.disableHiddenModels
         };
@@ -2845,6 +2999,7 @@ export const adminScript = `<script>
     document.getElementById('refreshUsage').addEventListener('click', fetchUsage);
     document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
     document.getElementById('rateLimitSeconds').addEventListener('input', updateSettingsDirtyState);
+    document.getElementById('adminSessionTtlDays').addEventListener('input', updateSettingsDirtyState);
     document.getElementById('rateLimitWait').addEventListener('change', updateSettingsDirtyState);
     document.getElementById('anthropicApiKey').addEventListener('input', updateSettingsDirtyState);
     document.getElementById('gatewayApiKey').addEventListener('input', updateSettingsDirtyState);
@@ -2859,6 +3014,9 @@ export const adminScript = `<script>
     });
     document.getElementById('clearAllUsageLogsBtn').addEventListener('click', function () {
       void clearAllUsageLogs();
+    });
+    document.getElementById('adminLogoutBtn').addEventListener('click', function () {
+      void logoutAdminSession();
     });
 
     document.getElementById('addMappingBtn').addEventListener('click', function () {
@@ -2931,6 +3089,7 @@ export const adminScript = `<script>
 
     applyI18n();
     restoreActiveTab();
+    fetchAdminSessionState();
     fetchAccounts();
     fetchStatus();
   </script>`

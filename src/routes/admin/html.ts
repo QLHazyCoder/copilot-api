@@ -739,6 +739,14 @@ export const adminHtml = `<!DOCTYPE html>
       font-size: 0.78rem;
       flex: 0 0 auto;
     }
+    .sidebar-admin-actions {
+      display: grid;
+      gap: 0.5rem;
+    }
+    .sidebar-admin-actions .btn {
+      width: 100%;
+      justify-content: center;
+    }
     .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
     .status-dot.online { background: var(--accent); }
     .refresh-btn { margin-left: auto; }
@@ -950,6 +958,18 @@ export const adminHtml = `<!DOCTYPE html>
       background: rgba(20, 33, 46, 0.52);
       border-color: rgba(63, 96, 131, 0.62);
       font-size: 0.74rem;
+    }
+    .settings-security-meta {
+      display: grid;
+      gap: 0.55rem;
+    }
+    .settings-security-summary {
+      margin-top: 0;
+    }
+    .settings-security-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
     }
     .toast-notification {
       position: fixed;
@@ -1286,6 +1306,9 @@ export const adminHtml = `<!DOCTYPE html>
             <option value="zh-CN" data-i18n="language.zhCN">简体中文</option>
           </select>
         </div>
+        <div class="sidebar-admin-actions">
+          <button class="btn btn-sm" id="adminLogoutBtn" type="button" data-i18n="settings.adminLogout">Sign Out</button>
+        </div>
         <div class="tabs sidebar-nav">
           <button class="tab active" data-tab="accounts" data-i18n="nav.accounts">Accounts</button>
           <button class="tab" data-tab="settings" data-i18n="nav.settings">Settings</button>
@@ -1403,6 +1426,23 @@ export const adminHtml = `<!DOCTYPE html>
           </div>
           <div class="settings-section">
             <div class="settings-title-row">
+              <div class="settings-section-title" data-i18n="settings.adminSecurity">Admin Security</div>
+              <div class="settings-title-actions">
+                <span class="settings-status-badge" id="adminSecurityStatus" data-i18n="settings.adminSecurityStatusPending">Loading</span>
+                <a class="btn settings-inline-btn btn-sm" id="manageAdminSecretLink" href="/admin/setup" data-i18n="settings.manageAdminSecret">Manage Secret</a>
+              </div>
+            </div>
+            <div class="settings-security-meta">
+              <p class="hint settings-security-summary" id="adminSecuritySummary" data-i18n="settings.adminSecurityLoading">Loading admin security status...</p>
+              <div class="settings-input-row">
+                <input class="input" id="adminSessionTtlDays" type="number" min="1" step="1" placeholder="Leave empty to use default" data-i18n-placeholder="settings.adminSessionTtlDaysPlaceholder">
+                <span class="settings-input-unit" data-i18n="settings.daysUnit">days</span>
+              </div>
+              <p class="hint" data-i18n="settings.adminSessionTtlDaysHint">Controls how long Admin login sessions remain valid. Leave empty to reset to the default 5 days.</p>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-title-row">
               <div class="settings-section-title" data-i18n="settings.usageLogMaintenance">Usage Log Maintenance</div>
               <div class="settings-title-actions">
                 <button class="btn settings-inline-btn btn-sm" id="clearUsageLogsBtn" type="button" data-i18n="settings.clearUsageLogs">Clear current account logs</button>
@@ -1468,7 +1508,7 @@ export const adminHtml = `<!DOCTYPE html>
         </div>
         <!-- MANUAL_CONTENT_START: Keep all user manual sections inside this block -->
         <div class="manual-doc">
-          <section class="manual-warning manual-note" data-i18n-html="manual.publicAdminNoteHtml"><strong>重点：</strong>如果需要公网访问 admin 页面，可通过 Caddy 反代并在其配置中添加账号密码；<code>/admin*</code> 走后台页面；其余路径直接反代到 copilot-api 服务进行使用，或者只允许 admin 路径访问，端点结合其他项目使用。</section>
+          <section class="manual-warning manual-note" data-i18n-html="manual.publicAdminNoteHtml"><strong>重点：</strong>公网访问 admin 页面时，后台登录依赖内置的管理密钥登录；Caddy 仅保留 TLS / 反代职责。<code>/admin*</code> 走后台页面，其余路径按需要单独反代或限制。</section>
 
           <section class="manual-section" data-i18n-html="manual.section2Html">
             <div class="manual-section-title">1. 每个端点可用模型</div>

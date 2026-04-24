@@ -12,6 +12,22 @@ import {
   type Account,
 } from "~/lib/accounts"
 import {
+  canManageAdminSecretInApp,
+  checkAdminLoginRateLimit,
+  clearAdminLoginFailures,
+  clearAdminSession,
+  createAdminSession,
+  getAdminAuthStatus,
+  getAdminSessionState,
+  isSameOriginAdminRequest,
+  recordAdminLoginFailure,
+  revokeAdminSession,
+  saveAdminSecret,
+  shouldEnforceAdminHttps,
+  validateAdminSecret,
+  verifyAdminSecret,
+} from "~/lib/admin-auth"
+import {
   getConfig,
   getReasoningEffortForModel,
   getUsageLogCountMode,
@@ -44,12 +60,14 @@ import { getGitHubUser } from "~/services/github/get-user"
 import { pollAccessTokenOnce } from "~/services/github/poll-access-token"
 
 import { adminHtml } from "./html"
-import { localOnlyMiddleware } from "./middleware"
+import { renderAdminLoginHtml } from "./login-html"
+import { adminAccessMiddleware } from "./middleware"
+import { resolveAuthPageLocale } from "./auth-page-i18n"
+import { renderAdminSetupHtml } from "./setup-html"
 
 export const adminRoutes = new Hono()
 
-// Apply localhost-only middleware to all admin routes
-adminRoutes.use("*", localOnlyMiddleware)
+adminRoutes.use("*", adminAccessMiddleware)
 
 async function isKnownModel(modelId: string): Promise<boolean> {
   if (!state.models || state.models.data.length === 0) {
@@ -106,6 +124,7 @@ interface ReorderAccountsRequestBody {
 interface AdminSettingsRequestBody {
   rateLimitSeconds?: number | null
   rateLimitWait?: boolean
+  adminSessionTtlDays?: number | null
   usageTestIntervalMinutes?: number | null
   usageLogCountMode?: UsageLogCountMode
   disableHiddenModels?: boolean
@@ -113,6 +132,15 @@ interface AdminSettingsRequestBody {
   clearAnthropicApiKey?: boolean
   authApiKey?: string | null
   clearAuthApiKey?: boolean
+}
+
+interface AdminLoginRequestBody {
+  secret?: string
+}
+
+interface AdminSetupRequestBody {
+  secret?: string
+  confirmSecret?: string
 }
 
 const DEFAULT_USAGE_LOG_LIMIT = 50
@@ -617,6 +645,220 @@ async function getPremiumModelConfigSnapshot(): Promise<PremiumModelConfigSnapsh
     modelSupportedReasoningEfforts,
   }
 }
+
+adminRoutes.get("/login", (c) => {
+  if (!getAdminAuthStatus().configured) {
+    return c.redirect("/admin/setup", 302)
+  }
+
+  const locale = resolveAuthPageLocale({
+    acceptLanguage: c.req.header("accept-language"),
+    queryLang: c.req.query("lang"),
+  })
+
+  return c.html(
+    renderAdminLoginHtml({
+      locale,
+      sessionTtlDays: getAdminAuthStatus().sessionTtlDays,
+      requiresHttps: shouldEnforceAdminHttps(),
+    }),
+  )
+})
+
+adminRoutes.get("/setup", async (c) => {
+  const sessionState = await getAdminSessionState(c)
+  const adminStatus = getAdminAuthStatus(sessionState)
+  const locale = resolveAuthPageLocale({
+    acceptLanguage: c.req.header("accept-language"),
+    queryLang: c.req.query("lang"),
+  })
+  const mode =
+    !adminStatus.configured ? "initial"
+    : adminStatus.secretManagedInApp ? "rotate"
+    : "readonly"
+
+  return c.html(
+    renderAdminSetupHtml({
+      locale,
+      mode,
+      sessionTtlDays: adminStatus.sessionTtlDays,
+      secretSource: adminStatus.secretSource,
+    }),
+  )
+})
+
+adminRoutes.get("/api/session", async (c) => {
+  const sessionState = await getAdminSessionState(c)
+  return c.json(getAdminAuthStatus(sessionState))
+})
+
+adminRoutes.post("/api/session/login", async (c) => {
+  const adminStatus = getAdminAuthStatus()
+  if (!adminStatus.configured) {
+    return c.json(
+      {
+        error: {
+          message:
+            "Admin secret is not configured yet. Complete setup from /admin/setup first.",
+          type: "setup_required",
+        },
+      },
+      428,
+    )
+  }
+
+  if (!isSameOriginAdminRequest(c)) {
+    return c.json(
+      {
+        error: {
+          message: "Forbidden: Cross-origin admin login request rejected",
+          type: "forbidden",
+        },
+      },
+      403,
+    )
+  }
+
+  const rateLimitState = checkAdminLoginRateLimit(c)
+  if (rateLimitState.limited) {
+    c.header("Retry-After", String(rateLimitState.retryAfterSeconds))
+    return c.json(
+      {
+        error: {
+          message:
+            "Too many failed login attempts. Please wait before trying again.",
+          type: "rate_limit_error",
+        },
+      },
+      429,
+    )
+  }
+
+  const body = await c.req
+    .json<AdminLoginRequestBody>()
+    .catch(() => ({} as AdminLoginRequestBody))
+  const validation = validateAdminSecret(body.secret ?? "")
+  if (!validation.valid) {
+    recordAdminLoginFailure(c)
+    return c.json(
+      {
+        error: {
+          message: "Invalid management secret",
+          type: "authentication_error",
+        },
+      },
+      401,
+    )
+  }
+
+  const verified = await verifyAdminSecret(validation.normalizedSecret)
+  if (!verified) {
+    recordAdminLoginFailure(c)
+    return c.json(
+      {
+        error: {
+          message: "Invalid management secret",
+          type: "authentication_error",
+        },
+      },
+      401,
+    )
+  }
+
+  clearAdminLoginFailures(c)
+  const sessionPayload = await createAdminSession(c)
+
+  return c.json({
+    success: true,
+    expiresAt:
+      sessionPayload ? new Date(sessionPayload.exp * 1000).toISOString() : null,
+  })
+})
+
+adminRoutes.post("/api/session/logout", async (c) => {
+  const sessionState = await getAdminSessionState(c)
+  revokeAdminSession(sessionState.payload)
+  clearAdminSession(c)
+  return c.json({ success: true })
+})
+
+adminRoutes.post("/api/setup", async (c) => {
+  const adminStatus = getAdminAuthStatus(await getAdminSessionState(c))
+  if (adminStatus.configured && !adminStatus.secretManagedInApp) {
+    return c.json(
+      {
+        error: {
+          message:
+            "Admin secret is managed by environment variables and cannot be changed from the web UI.",
+          type: "forbidden",
+        },
+      },
+      403,
+    )
+  }
+
+  if (!isSameOriginAdminRequest(c)) {
+    return c.json(
+      {
+        error: {
+          message: "Forbidden: Cross-origin admin setup request rejected",
+          type: "forbidden",
+        },
+      },
+      403,
+    )
+  }
+
+  const body = await c.req
+    .json<AdminSetupRequestBody>()
+    .catch(() => ({} as AdminSetupRequestBody))
+  const validation = validateAdminSecret(body.secret ?? "")
+  if (!validation.valid) {
+    return c.json(
+      {
+        error: {
+          message: validation.message ?? "Invalid admin secret",
+          type: "validation_error",
+        },
+      },
+      400,
+    )
+  }
+
+  if (body.confirmSecret?.trim() !== validation.normalizedSecret) {
+    return c.json(
+      {
+        error: {
+          message: "The confirmation secret does not match",
+          type: "validation_error",
+        },
+      },
+      400,
+    )
+  }
+
+  if (adminStatus.configured && !canManageAdminSecretInApp()) {
+    return c.json(
+      {
+        error: {
+          message:
+            "Admin secret is managed by environment variables and cannot be changed from the web UI.",
+          type: "forbidden",
+        },
+      },
+      403,
+    )
+  }
+
+  await saveAdminSecret(validation.normalizedSecret)
+  const sessionPayload = await createAdminSession(c)
+
+  return c.json({
+    success: true,
+    expiresAt:
+      sessionPayload ? new Date(sessionPayload.exp * 1000).toISOString() : null,
+  })
+})
 
 // Get all accounts
 adminRoutes.get("/api/accounts", async (c) => {
@@ -1302,15 +1544,24 @@ adminRoutes.get("/api/settings", (c) => {
     config.usageTestIntervalMinutes === undefined ?
       10
     : config.usageTestIntervalMinutes
+  const adminAuthStatus = getAdminAuthStatus()
 
   return c.json({
     rateLimitSeconds: config.rateLimitSeconds ?? null,
     rateLimitWait: config.rateLimitWait ?? false,
+    adminSessionTtlDays: config.adminAuth?.sessionTtlDays ?? 5,
     usageTestIntervalMinutes,
     usageLogCountMode: getUsageLogCountMode(),
     disableHiddenModels: config.disableHiddenModels ?? false,
     hasAnthropicApiKey: Boolean(config.anthropicApiKey?.trim()),
     hasAuthApiKey: Boolean(authApiKey),
+    adminAuth: {
+      configured: adminAuthStatus.configured,
+      secretSource: adminAuthStatus.secretSource,
+      secretManagedInApp: adminAuthStatus.secretManagedInApp,
+      sessionTtlDays: adminAuthStatus.sessionTtlDays,
+      enforceHttps: adminAuthStatus.enforceHttps,
+    },
     envOverride: {
       rateLimitSeconds: process.env.RATE_LIMIT !== undefined,
       rateLimitWait: process.env.RATE_LIMIT_WAIT !== undefined,
@@ -1343,6 +1594,22 @@ adminRoutes.put("/api/settings", async (c) => {
   const rateLimitWait = body.rateLimitWait ?? config.rateLimitWait ?? false
   const disableHiddenModels =
     body.disableHiddenModels ?? config.disableHiddenModels ?? false
+  const adminSessionTtlDays = resolveNullableConfigValue(
+    body.adminSessionTtlDays,
+    config.adminAuth?.sessionTtlDays,
+  )
+
+  if (!isValidPositiveInteger(adminSessionTtlDays)) {
+    return c.json(
+      {
+        error: {
+          message: '"adminSessionTtlDays" must be an integer greater than 0',
+          type: "validation_error",
+        },
+      },
+      400,
+    )
+  }
 
   const usageTestIntervalMinutes = resolveUsageTestIntervalMinutes(
     body.usageTestIntervalMinutes,
@@ -1393,6 +1660,10 @@ adminRoutes.put("/api/settings", async (c) => {
       apiKey: authApiKey,
       apiKeys: authApiKey ? [authApiKey] : [],
     },
+    adminAuth: {
+      ...config.adminAuth,
+      sessionTtlDays: adminSessionTtlDays,
+    },
     rateLimitSeconds,
     rateLimitWait,
     usageTestIntervalMinutes,
@@ -1408,6 +1679,7 @@ adminRoutes.put("/api/settings", async (c) => {
     settings: {
       rateLimitSeconds: rateLimitSeconds ?? null,
       rateLimitWait,
+      adminSessionTtlDays: adminSessionTtlDays ?? 5,
       usageTestIntervalMinutes: usageTestIntervalMinutes ?? null,
       usageLogCountMode,
       disableHiddenModels,

@@ -142,7 +142,7 @@ docker compose up -d
 docker compose logs -f
 ```
 
-Then visit **http://localhost:4141/admin** to add your GitHub account.
+Then visit **http://localhost:4141/admin**. On first run, you will be redirected to `/admin/setup` to create the Admin management secret. After that, sign in from `/admin/login` and add your GitHub account.
 
 ### Using Docker Run
 
@@ -158,10 +158,12 @@ docker run -d \
 ## Account Setup
 
 1. Start the server using Docker
-2. Open [http://localhost:4141/admin](http://localhost:4141/admin) in your browser (must be accessed from localhost)
-3. Click "Add Account" to start the GitHub OAuth device flow
-4. Enter the code shown on GitHub's device authorization page
-5. Your account will be automatically configured once authorized
+2. Open [http://localhost:4141/admin](http://localhost:4141/admin) in your browser
+3. If this is the first run and no Admin secret is configured yet, complete the one-time setup at `/admin/setup`
+4. Sign in with the Admin management secret
+5. Click "Add Account" to start the GitHub OAuth device flow
+6. Enter the code shown on GitHub's device authorization page
+7. Your account will be automatically configured once authorized
 
 The admin panel includes five tabs: `Accounts`, `Models`, `Usage`, `Model Mappings`, and `Settings`.
 
@@ -212,6 +214,7 @@ The admin panel includes five tabs: `Accounts`, `Models`, `Usage`, `Model Mappin
 ### Settings
 - Edit global rate-limit and related admin settings (env vars still take precedence).
 - Configure `anthropicApiKey` in the page for official Claude `/v1/messages/count_tokens` accuracy.
+- View Admin security status, session lifetime, and the current management-secret source.
 - Includes Usage test interval configuration.
 - Includes a button to clear the current active account's local Usage log list. Historical month logs are also cleaned automatically on the first new write after the 1st of each month.
 
@@ -227,6 +230,8 @@ The admin panel includes five tabs: `Accounts`, `Models`, `Usage`, `Model Mappin
 | `RATE_LIMIT_WAIT` | `false` | Wait instead of error when rate limit is hit |
 | `SHOW_TOKEN` | `false` | Display tokens in logs |
 | `PROXY_ENV` | `false` | Use `HTTP_PROXY`/`HTTPS_PROXY` from environment |
+| `ADMIN_SECRET` | - | Plaintext Admin management secret used by `/admin/login`; recommended only through secure environment injection |
+| `ADMIN_SECRET_HASH` | - | Pre-hashed Admin management secret; takes precedence over `ADMIN_SECRET` and web-saved config |
 
 ### Docker Compose Example with Options
 
@@ -285,7 +290,7 @@ Note: Gemini ingress is currently chat-only and text-input focused (`contents.pa
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/admin` | `GET` | Account management Web UI (localhost only) |
+| `/admin` | `GET` | Account management Web UI (protected by Admin secret login; first-time setup uses `/admin/setup`) |
 | `/usage` | `GET` | Copilot usage statistics and quota |
 | `/token` | `GET` | Current Copilot token |
 

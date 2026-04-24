@@ -10,6 +10,10 @@ import { Hono } from "hono"
 
 import type { Account } from "../src/lib/accounts"
 
+import {
+  hashAdminSecret,
+  resetAdminAuthRuntimeState,
+} from "../src/lib/admin-auth"
 import { mergeConfigWithDefaults, saveConfig } from "../src/lib/config"
 import { copilotTokenManager } from "../src/lib/copilot-token-manager"
 import { runtimeManager } from "../src/lib/runtime-manager"
@@ -44,6 +48,8 @@ const accountB: Account = {
   accountType: "business",
   createdAt: "2026-01-02T00:00:00.000Z",
 }
+
+const adminSecret = "runtime-admin-secret"
 
 function createUsageResponse(): Response {
   return Response.json({
@@ -159,7 +165,27 @@ function createTestApp(path: "/admin" | "/usage"): Hono {
   return app
 }
 
+async function createAdminSessionCookie(app: Hono): Promise<string> {
+  const response = await app.request("http://localhost/admin/api/session/login", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      secret: adminSecret,
+    }),
+  })
+
+  const setCookie = response.headers.get("set-cookie")
+  if (!setCookie) {
+    throw new Error("Expected admin login to return a session cookie")
+  }
+
+  return setCookie.split(";")[0]
+}
+
 beforeEach(async () => {
+  resetAdminAuthRuntimeState()
   fetchRecords.length = 0
   runtimeManager.clearAccount(accountA.id)
   runtimeManager.clearAccount(accountB.id)
@@ -174,11 +200,18 @@ beforeEach(async () => {
   state.rateLimitWait = false
 
   const config = mergeConfigWithDefaults()
+  const secretHash = await hashAdminSecret(adminSecret)
   await saveConfig({
     ...config,
     accounts: [accountA, accountB],
     activeAccountId: accountA.id,
     usageTestIntervalMinutes: 10,
+    adminAuth: {
+      ...config.adminAuth,
+      secretHash,
+      sessionTtlDays: 5,
+      enforceHttps: true,
+    },
   })
 
   globalThis.fetch = ((input, init) => {
@@ -249,11 +282,15 @@ afterEach(() => {
 describe("runtime integration", () => {
   test("activating another account refreshes active runtime models", async () => {
     const app = createTestApp("/admin")
+    const cookie = await createAdminSessionCookie(app)
 
     const response = await app.request(
       `http://localhost/admin/api/accounts/${accountB.id}/activate`,
       {
         method: "POST",
+        headers: {
+          cookie,
+        },
       },
     )
 
