@@ -97,8 +97,9 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
     "models.featureSimple.tools": "tools",
     "models.featureSimple.vision": "vision",
     "models.featureSimple.embeddings": "embeddings",
-    "settings.trafficControl": "Traffic Control",
-    "settings.subtitle": "Configure process-wide request throttling behavior.",
+    "settings.trafficControl": "System Settings",
+    "settings.subtitle":
+      "Manage throttling, context compression, keys, and maintenance.",
     "settings.unsaved": "Unsaved changes",
     "settings.rateLimitSeconds": "Rate Limit Seconds",
     "settings.secondsUnit": "sec",
@@ -110,6 +111,21 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
       "Wait instead of returning HTTP 429 when rate limit is hit",
     "settings.rateLimitWaitHint":
       "When enabled, requests queue instead of failing immediately.",
+    "settings.contextCompression": "Server automatic context compression",
+    "settings.contextCompressionHint":
+      "When a request gets close to the model window, older turns are summarized before the final trimming fallback.",
+    "settings.contextCompressionPercent": "Start at context usage",
+    "settings.contextCompressionPercentPlaceholder": "80",
+    "settings.contextKeepRecentTurns": "Keep recent turns",
+    "settings.contextKeepRecentTurnsPlaceholder": "4",
+    "settings.contextCompressionModel": "Summary model",
+    "settings.contextCompressionModelPlaceholder": "Use small model",
+    "settings.contextCompressionCostHint":
+      "Summary calls use an extra upstream request when compression is triggered. Leave the model empty to use the configured small model.",
+    "settings.validationContextCompressionPercent":
+      "Context compression percent must be between 50 and 95.",
+    "settings.validationContextKeepRecentTurns":
+      "Recent turns must be an integer between 1 and 20.",
     "settings.anthropicApiKey": "Anthropic API Key",
     "settings.anthropicApiKeyPlaceholder": "Leave empty to keep current key",
     "settings.anthropicApiKeyHint":
@@ -386,8 +402,8 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
     "models.featureSimple.tools": "工具",
     "models.featureSimple.vision": "视觉",
     "models.featureSimple.embeddings": "向量嵌入",
-    "settings.trafficControl": "流量控制",
-    "settings.subtitle": "配置进程级请求限流行为。",
+    "settings.trafficControl": "系统设置",
+    "settings.subtitle": "管理限流、上下文压缩、密钥与维护项。",
     "settings.unsaved": "有未保存更改",
     "settings.rateLimitSeconds": "限流秒数",
     "settings.secondsUnit": "秒",
@@ -395,6 +411,21 @@ export const adminMessages: Record<AdminLocale, Record<string, string>> = {
     "settings.rateLimitHint": "请求之间的全局最小间隔。留空表示不限制。",
     "settings.rateLimitWait": "触发限流时等待，而不是直接返回 HTTP 429",
     "settings.rateLimitWaitHint": "开启后，请求将排队等待，而不是立即失败。",
+    "settings.contextCompression": "服务器自动压缩上下文",
+    "settings.contextCompressionHint":
+      "当请求接近模型上下文上限时，先把较早的对话轮次总结，再使用最后的裁剪兜底。",
+    "settings.contextCompressionPercent": "达到上下文占用时开始",
+    "settings.contextCompressionPercentPlaceholder": "80",
+    "settings.contextKeepRecentTurns": "保留最近轮数",
+    "settings.contextKeepRecentTurnsPlaceholder": "4",
+    "settings.contextCompressionModel": "摘要模型",
+    "settings.contextCompressionModelPlaceholder": "使用小模型",
+    "settings.contextCompressionCostHint":
+      "触发压缩时会额外调用一次上游摘要请求。模型留空时使用当前配置的小模型。",
+    "settings.validationContextCompressionPercent":
+      "上下文压缩触发百分比必须在 50 到 95 之间。",
+    "settings.validationContextKeepRecentTurns":
+      "保留最近轮数必须是 1 到 20 之间的整数。",
     "settings.anthropicApiKey": "Anthropic API Key",
     "settings.anthropicApiKeyPlaceholder": "留空则保留当前密钥",
     "settings.anthropicApiKeyHint":

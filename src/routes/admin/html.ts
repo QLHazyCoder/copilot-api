@@ -57,9 +57,11 @@ export const adminHtml = `<!DOCTYPE html>
       grid-template-columns: 240px minmax(0, 1fr);
       gap: 1rem;
       min-height: 100%;
+      min-width: 0;
       align-items: start;
     }
     .sidebar {
+      min-width: 0;
       background: linear-gradient(180deg, var(--bg-surface), var(--bg-panel));
       border: 1px solid var(--border-default);
       border-radius: var(--radius-md);
@@ -752,17 +754,32 @@ export const adminHtml = `<!DOCTYPE html>
     .refresh-btn { margin-left: auto; }
     .refresh-btn.loading svg { animation: spin 1s linear infinite; }
     .form-grid { display: grid; gap: 0.85rem; }
+    .settings-form-grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 0.86fr) minmax(420px, 1.14fr);
+      gap: 0.65rem;
+      align-items: stretch;
+    }
+    #tab-settings .card {
+      height: auto;
+      overflow: visible;
+      padding: 0.65rem 0.75rem;
+    }
+    #tab-settings .card-header {
+      gap: 0.75rem;
+      margin-bottom: 0.55rem;
+    }
     .settings-header-main {
       display: flex;
       flex-direction: column;
-      gap: 0.2rem;
+      gap: 0.12rem;
       min-width: 0;
     }
     .settings-subtitle {
       margin: 0;
       font-size: 0.76rem;
       color: var(--text-secondary);
-      line-height: 1.45;
+      line-height: 1.3;
     }
     .settings-save-wrap {
       display: inline-flex;
@@ -784,28 +801,53 @@ export const adminHtml = `<!DOCTYPE html>
       display: inline-flex;
     }
     .settings-section {
+      height: 100%;
+      min-width: 0;
       border: 1px solid rgba(53, 80, 107, 0.72);
       border-radius: var(--radius-sm);
       background: rgba(12, 21, 31, 0.58);
-      padding: 0.78rem;
+      padding: 0.62rem 0.68rem;
     }
     .settings-rate-limit-section {
       display: grid;
-      gap: 0.5rem;
+      gap: 0.42rem;
+    }
+    .settings-context-section {
+      display: grid;
+      gap: 0.45rem;
+    }
+    .settings-context-options {
+      display: grid;
+      grid-template-columns: minmax(96px, 0.55fr) minmax(96px, 0.55fr) minmax(160px, 1.1fr);
+      gap: 0.45rem;
+    }
+    .settings-field {
+      display: grid;
+      gap: 0.25rem;
+      min-width: 0;
+    }
+    .settings-field label {
+      color: var(--text-secondary);
+      font-size: 0.74rem;
+      line-height: 1.35;
+    }
+    .settings-field .input:disabled {
+      opacity: 0.62;
+      cursor: not-allowed;
     }
     .settings-section-title {
       font-size: 0.82rem;
       color: var(--text-primary);
       font-weight: 600;
-      margin-bottom: 0.55rem;
+      margin-bottom: 0.38rem;
     }
     .settings-title-row {
       display: flex;
       align-items: center;
       justify-content: flex-start;
       flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-bottom: 0.55rem;
+      gap: 0.42rem;
+      margin-bottom: 0.4rem;
     }
     .settings-title-row .settings-section-title {
       margin-bottom: 0;
@@ -813,7 +855,7 @@ export const adminHtml = `<!DOCTYPE html>
     .settings-title-actions {
       display: inline-flex;
       align-items: center;
-      gap: 0.45rem;
+      gap: 0.38rem;
       margin-left: auto;
       flex-wrap: wrap;
     }
@@ -837,8 +879,9 @@ export const adminHtml = `<!DOCTYPE html>
       color: #9ce7dd;
     }
     .input {
+      min-width: 0;
       width: 100%;
-      padding: 0.5rem;
+      padding: 0.42rem 0.5rem;
       border: 1px solid var(--border-default);
       border-radius: var(--radius-sm);
       background: rgba(20, 33, 46, 0.9);
@@ -849,18 +892,18 @@ export const adminHtml = `<!DOCTYPE html>
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      gap: 0.45rem;
+      gap: 0.4rem;
     }
     .settings-inline-btn {
       align-self: stretch;
-      min-height: 34px;
-      padding: 0 0.75rem;
+      min-height: 31px;
+      padding: 0 0.66rem;
       white-space: nowrap;
     }
     .settings-input-unit {
       min-width: 34px;
       text-align: center;
-      padding: 0.45rem 0.5rem;
+      padding: 0.38rem 0.48rem;
       border-radius: var(--radius-sm);
       border: 1px solid rgba(63, 96, 131, 0.72);
       background: rgba(20, 33, 46, 0.85);
@@ -872,15 +915,15 @@ export const adminHtml = `<!DOCTYPE html>
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 0.9rem;
-      padding: 0.75rem 0.78rem;
+      gap: 0.7rem;
+      padding: 0.5rem 0.58rem;
       border: 1px solid rgba(53, 80, 107, 0.72);
       border-radius: var(--radius-sm);
       background: rgba(12, 21, 31, 0.58);
       cursor: pointer;
     }
     .settings-switch-row-compact {
-      padding: 0.58rem 0;
+      padding: 0.42rem 0 0;
       border: 0;
       border-top: 1px dashed rgba(63, 96, 131, 0.62);
       border-radius: 0;
@@ -890,17 +933,17 @@ export const adminHtml = `<!DOCTYPE html>
       min-width: 0;
       display: flex;
       flex-direction: column;
-      gap: 0.22rem;
+      gap: 0.14rem;
     }
     .settings-switch-title {
       color: var(--text-primary);
       font-size: 0.84rem;
-      line-height: 1.4;
+      line-height: 1.25;
     }
     .settings-switch-hint {
       color: var(--text-secondary);
       font-size: 0.74rem;
-      line-height: 1.45;
+      line-height: 1.3;
     }
     .settings-switch {
       position: relative;
@@ -942,7 +985,7 @@ export const adminHtml = `<!DOCTYPE html>
       transform: translateX(18px);
       background: #ecfffc;
     }
-    .hint { color: var(--text-secondary); font-size: 0.75rem; line-height: 1.5; }
+    .hint { color: var(--text-secondary); font-size: 0.75rem; line-height: 1.35; }
     .notice {
       margin-top: 0.75rem;
       padding: 0.75rem;
@@ -954,14 +997,14 @@ export const adminHtml = `<!DOCTYPE html>
     }
     .settings-notice {
       margin-top: 0;
-      padding: 0.58rem 0.68rem;
+      padding: 0.42rem 0.55rem;
       background: rgba(20, 33, 46, 0.52);
       border-color: rgba(63, 96, 131, 0.62);
       font-size: 0.74rem;
     }
     .settings-security-meta {
       display: grid;
-      gap: 0.55rem;
+      gap: 0.42rem;
     }
     .settings-security-summary {
       margin-top: 0;
@@ -1005,6 +1048,24 @@ export const adminHtml = `<!DOCTYPE html>
     }
     .settings-rate-limit-section .settings-notice {
       margin-top: 0;
+    }
+    .settings-key-section,
+    .settings-admin-section,
+    .settings-maintenance-section {
+      display: grid;
+      align-content: start;
+    }
+    .settings-key-section {
+      gap: 0.35rem;
+    }
+    .settings-admin-section .settings-input-row {
+      max-width: 240px;
+    }
+    .settings-maintenance-section {
+      min-height: 0;
+    }
+    .settings-maintenance-section .hint {
+      margin-bottom: 0.45rem;
     }
     .mapping-form {
       display: none;
@@ -1275,8 +1336,14 @@ export const adminHtml = `<!DOCTYPE html>
         width: 100%;
         justify-content: flex-end;
       }
+      .settings-form-grid {
+        grid-template-columns: 1fr;
+      }
       .settings-switch-row {
         align-items: flex-start;
+      }
+      .settings-context-options {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -1373,15 +1440,15 @@ export const adminHtml = `<!DOCTYPE html>
       <div class="card">
         <div class="card-header">
           <div class="settings-header-main">
-            <span class="card-title" data-i18n="settings.trafficControl">Traffic Control</span>
-            <p class="settings-subtitle" data-i18n="settings.subtitle">Configure process-wide request throttling behavior.</p>
+            <span class="card-title" data-i18n="settings.trafficControl">System Settings</span>
+            <p class="settings-subtitle" data-i18n="settings.subtitle">Manage throttling, context compression, keys, and maintenance.</p>
           </div>
           <div class="settings-save-wrap">
             <span class="settings-dirty-indicator" id="settingsDirtyIndicator" data-i18n="settings.unsaved">Unsaved changes</span>
             <button class="btn btn-primary btn-sm" id="saveSettingsBtn" data-i18n="common.save" disabled>Save</button>
           </div>
         </div>
-        <div class="form-grid">
+        <div class="settings-form-grid">
           <div class="settings-section settings-rate-limit-section">
             <div class="settings-section-title" data-i18n="settings.rateLimitSeconds">Rate Limit Seconds</div>
             <div class="settings-input-row">
@@ -1402,7 +1469,37 @@ export const adminHtml = `<!DOCTYPE html>
               Loading settings...
             </div>
           </div>
-          <div class="settings-section">
+          <div class="settings-section settings-context-section">
+            <label class="settings-switch-row" for="contextCompressionEnabled">
+              <span class="settings-switch-copy">
+                <span class="settings-switch-title" data-i18n="settings.contextCompression">Server automatic context compression</span>
+                <span class="settings-switch-hint" data-i18n="settings.contextCompressionHint">When a request gets close to the model window, older turns are summarized before the final trimming fallback.</span>
+              </span>
+              <span class="settings-switch">
+                <input id="contextCompressionEnabled" type="checkbox">
+                <span class="settings-switch-slider"></span>
+              </span>
+            </label>
+            <div class="settings-context-options" id="contextCompressionOptions">
+              <div class="settings-field">
+                <label for="contextCompressionPercent" data-i18n="settings.contextCompressionPercent">Start at context usage</label>
+                <div class="settings-input-row">
+                  <input class="input" id="contextCompressionPercent" type="number" min="50" max="95" step="1" placeholder="80" data-i18n-placeholder="settings.contextCompressionPercentPlaceholder">
+                  <span class="settings-input-unit">%</span>
+                </div>
+              </div>
+              <div class="settings-field">
+                <label for="contextKeepRecentTurns" data-i18n="settings.contextKeepRecentTurns">Keep recent turns</label>
+                <input class="input" id="contextKeepRecentTurns" type="number" min="1" max="20" step="1" placeholder="4" data-i18n-placeholder="settings.contextKeepRecentTurnsPlaceholder">
+              </div>
+              <div class="settings-field">
+                <label for="contextCompressionModel" data-i18n="settings.contextCompressionModel">Summary model</label>
+                <input class="input" id="contextCompressionModel" spellcheck="false" placeholder="Use small model" data-i18n-placeholder="settings.contextCompressionModelPlaceholder">
+              </div>
+            </div>
+            <p class="hint" data-i18n="settings.contextCompressionCostHint">Summary calls use an extra upstream request when compression is triggered. Leave the model empty to use the configured small model.</p>
+          </div>
+          <div class="settings-section settings-key-section">
             <div class="settings-title-row">
               <div class="settings-section-title" data-i18n="settings.anthropicApiKey">Anthropic API Key</div>
               <span class="settings-status-badge" id="anthropicApiKeyStatus" data-i18n="settings.anthropicApiKeyStatusNotSet">Not set</span>
@@ -1413,7 +1510,7 @@ export const adminHtml = `<!DOCTYPE html>
             </div>
             <p class="hint" data-i18n="settings.anthropicApiKeyHint">This key must be a valid Anthropic API key. It is only used for accurate token counting on Claude models.</p>
           </div>
-          <div class="settings-section">
+          <div class="settings-section settings-key-section">
             <div class="settings-title-row">
               <div class="settings-section-title" data-i18n="settings.gatewayApiKey">Gateway API Key</div>
               <span class="settings-status-badge" id="gatewayApiKeyStatus" data-i18n="settings.gatewayApiKeyStatusNotSet">Not set</span>
@@ -1424,7 +1521,7 @@ export const adminHtml = `<!DOCTYPE html>
             </div>
             <p class="hint" data-i18n="settings.gatewayApiKeyHint">Suitable for scenarios without gpt/new-style relay projects, helping avoid unauthorized calls or abuse after public exposure.</p>
           </div>
-          <div class="settings-section">
+          <div class="settings-section settings-admin-section">
             <div class="settings-title-row">
               <div class="settings-section-title" data-i18n="settings.adminSecurity">Admin Security</div>
               <div class="settings-title-actions">
@@ -1441,7 +1538,7 @@ export const adminHtml = `<!DOCTYPE html>
               <p class="hint" data-i18n="settings.adminSessionTtlDaysHint">Controls how long Admin login sessions remain valid. Leave empty to reset to the default 5 days.</p>
             </div>
           </div>
-          <div class="settings-section">
+          <div class="settings-section settings-maintenance-section">
             <div class="settings-title-row">
               <div class="settings-section-title" data-i18n="settings.usageLogMaintenance">Usage Log Maintenance</div>
               <div class="settings-title-actions">

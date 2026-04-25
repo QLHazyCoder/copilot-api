@@ -29,11 +29,13 @@ import {
 } from "~/lib/admin-auth"
 import {
   getConfig,
+  getContextManagementConfig,
   getReasoningEffortForModel,
   getUsageLogCountMode,
   isValidReasoningEffort,
   isValidUsageLogCountMode,
   updateConfig,
+  type ContextManagementConfig,
   type ModelCardMetadata,
   type ReasoningEffort,
   type UsageLogCountMode,
@@ -128,6 +130,12 @@ interface AdminSettingsRequestBody {
   usageTestIntervalMinutes?: number | null
   usageLogCountMode?: UsageLogCountMode
   disableHiddenModels?: boolean
+  contextManagement?: {
+    enabled?: boolean
+    summarizeAtPercent?: number | null
+    keepRecentTurns?: number | null
+    summarizerModel?: string | null
+  }
   anthropicApiKey?: string | null
   clearAnthropicApiKey?: boolean
   authApiKey?: string | null
@@ -462,6 +470,78 @@ function isValidUsageTestIntervalMinutes(
   return isValidPositiveInteger(value)
 }
 
+function resolveContextManagementConfig(
+  body: AdminSettingsRequestBody,
+  config: ReturnType<typeof getConfig>,
+): ContextManagementConfig {
+  const existing = config.contextManagement ?? {}
+  const resolved = getContextManagementConfig()
+  const bodyContext = body.contextManagement
+
+  if (!bodyContext) {
+    return existing
+  }
+
+  const enabled = bodyContext.enabled ?? resolved.mode === "summarize_then_trim"
+  const summarizeAtPercent =
+    bodyContext.summarizeAtPercent ?? resolved.summarizeAtRatio * 100
+  const keepRecentTurns =
+    bodyContext.keepRecentTurns ?? resolved.keepRecentTurns
+  const summarizerModel =
+    bodyContext.summarizerModel === undefined ?
+      existing.summarizerModel
+    : bodyContext.summarizerModel?.trim() || undefined
+
+  return {
+    ...existing,
+    mode: enabled ? "summarize_then_trim" : "trim",
+    summarizeAtRatio: summarizeAtPercent / 100,
+    keepRecentTurns,
+    summarizerModel,
+  }
+}
+
+function validateContextManagementBody(
+  c: Context,
+  body: AdminSettingsRequestBody,
+): Response | null {
+  const bodyContext = body.contextManagement
+  if (!bodyContext) {
+    return null
+  }
+
+  const summarizeAtPercent = bodyContext.summarizeAtPercent
+  if (
+    summarizeAtPercent !== undefined
+    && summarizeAtPercent !== null
+    && (!Number.isFinite(summarizeAtPercent)
+      || summarizeAtPercent < 50
+      || summarizeAtPercent > 95)
+  ) {
+    return createValidationErrorResponse(
+      c,
+      '"contextManagement.summarizeAtPercent" must be between 50 and 95',
+    )
+  }
+
+  const keepRecentTurns = bodyContext.keepRecentTurns
+  if (
+    keepRecentTurns !== undefined
+    && keepRecentTurns !== null
+    && (!Number.isFinite(keepRecentTurns)
+      || !Number.isInteger(keepRecentTurns)
+      || keepRecentTurns < 1
+      || keepRecentTurns > 20)
+  ) {
+    return createValidationErrorResponse(
+      c,
+      '"contextManagement.keepRecentTurns" must be an integer between 1 and 20',
+    )
+  }
+
+  return null
+}
+
 function resolveAnthropicApiKey(
   body: AdminSettingsRequestBody,
   currentValue: string | undefined,
@@ -668,6 +748,12 @@ function getAdminSettingsResponse(config: ReturnType<typeof getConfig>): {
   usageTestIntervalMinutes: number | null
   usageLogCountMode: UsageLogCountMode
   disableHiddenModels: boolean
+  contextManagement: {
+    enabled: boolean
+    summarizeAtPercent: number
+    keepRecentTurns: number
+    summarizerModel: string | null
+  }
   hasAnthropicApiKey: boolean
   hasAuthApiKey: boolean
   adminAuth: {
@@ -688,6 +774,7 @@ function getAdminSettingsResponse(config: ReturnType<typeof getConfig>): {
       10
     : config.usageTestIntervalMinutes
   const adminAuthStatus = getAdminAuthStatus()
+  const contextManagement = getContextManagementConfig()
 
   return {
     rateLimitSeconds: config.rateLimitSeconds ?? null,
@@ -696,6 +783,12 @@ function getAdminSettingsResponse(config: ReturnType<typeof getConfig>): {
     usageTestIntervalMinutes,
     usageLogCountMode: getUsageLogCountMode(),
     disableHiddenModels: config.disableHiddenModels ?? false,
+    contextManagement: {
+      enabled: contextManagement.mode === "summarize_then_trim",
+      summarizeAtPercent: Math.round(contextManagement.summarizeAtRatio * 100),
+      keepRecentTurns: contextManagement.keepRecentTurns,
+      summarizerModel: contextManagement.summarizerModel ?? null,
+    },
     hasAnthropicApiKey: Boolean(config.anthropicApiKey?.trim()),
     hasAuthApiKey: Boolean(authApiKey),
     adminAuth: {
@@ -733,6 +826,7 @@ function validateAdminSettings(
       adminSessionTtlDays: number | undefined
       anthropicApiKey: string | undefined
       authApiKey: string | undefined
+      contextManagement: ContextManagementConfig
       disableHiddenModels: boolean
       rateLimitSeconds: number | undefined
       rateLimitWait: boolean
@@ -784,6 +878,11 @@ function validateAdminSettings(
     )
   }
 
+  const contextValidationError = validateContextManagementBody(c, body)
+  if (contextValidationError) {
+    return contextValidationError
+  }
+
   return {
     rateLimitSeconds,
     rateLimitWait: body.rateLimitWait ?? config.rateLimitWait ?? false,
@@ -792,6 +891,7 @@ function validateAdminSettings(
     usageLogCountMode: body.usageLogCountMode ?? getUsageLogCountMode(),
     disableHiddenModels:
       body.disableHiddenModels ?? config.disableHiddenModels ?? false,
+    contextManagement: resolveContextManagementConfig(body, config),
     anthropicApiKey: resolveAnthropicApiKey(
       body,
       config.anthropicApiKey?.trim() || undefined,
@@ -804,6 +904,7 @@ async function updateAdminSettings(settings: {
   adminSessionTtlDays: number | undefined
   anthropicApiKey: string | undefined
   authApiKey: string | undefined
+  contextManagement: ContextManagementConfig
   disableHiddenModels: boolean
   rateLimitSeconds: number | undefined
   rateLimitWait: boolean
@@ -826,6 +927,7 @@ async function updateAdminSettings(settings: {
     usageTestIntervalMinutes: settings.usageTestIntervalMinutes,
     usageLogCountMode: settings.usageLogCountMode,
     disableHiddenModels: settings.disableHiddenModels,
+    contextManagement: settings.contextManagement,
     anthropicApiKey: settings.anthropicApiKey,
   }))
 }
@@ -836,6 +938,7 @@ function createAdminSettingsSuccessResponse(
     adminSessionTtlDays: number | undefined
     anthropicApiKey: string | undefined
     authApiKey: string | undefined
+    contextManagement: ContextManagementConfig
     disableHiddenModels: boolean
     rateLimitSeconds: number | undefined
     rateLimitWait: boolean
@@ -852,6 +955,10 @@ function createAdminSettingsSuccessResponse(
       usageTestIntervalMinutes: settings.usageTestIntervalMinutes ?? null,
       usageLogCountMode: settings.usageLogCountMode,
       disableHiddenModels: settings.disableHiddenModels,
+      contextManagement: getAdminSettingsResponse({
+        ...getConfig(),
+        contextManagement: settings.contextManagement,
+      }).contextManagement,
       hasAnthropicApiKey: Boolean(settings.anthropicApiKey),
       hasAuthApiKey: Boolean(settings.authApiKey),
     },

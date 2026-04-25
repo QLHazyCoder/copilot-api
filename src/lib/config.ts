@@ -27,6 +27,25 @@ export type ReasoningEffort =
   | "xhigh"
 
 export type UsageLogCountMode = "request" | "conversation"
+export type ContextManagementMode = "trim" | "summarize_then_trim"
+
+export interface ContextManagementConfig {
+  mode?: ContextManagementMode
+  summarizeAtRatio?: number
+  targetRatio?: number
+  keepRecentTurns?: number
+  summaryMaxTokens?: number
+  summarizerModel?: string
+}
+
+export interface ResolvedContextManagementConfig {
+  mode: ContextManagementMode
+  summarizeAtRatio: number
+  targetRatio: number
+  keepRecentTurns: number
+  summaryMaxTokens: number
+  summarizerModel?: string
+}
 
 export interface AuthConfig {
   apiKey?: string
@@ -56,6 +75,7 @@ export interface AppConfig {
   rateLimitWait?: boolean
   usageTestIntervalMinutes?: number | null
   usageLogCountMode?: UsageLogCountMode
+  contextManagement?: ContextManagementConfig
   // Account management
   accounts?: Array<AccountConfig>
   activeAccountId?: string | null
@@ -115,6 +135,13 @@ const defaultConfig: AppConfig = {
   rateLimitWait: false,
   usageTestIntervalMinutes: 10,
   usageLogCountMode: "request",
+  contextManagement: {
+    mode: "trim",
+    summarizeAtRatio: 0.8,
+    targetRatio: 0.55,
+    keepRecentTurns: 4,
+    summaryMaxTokens: 2048,
+  },
   accounts: [],
   activeAccountId: null,
 }
@@ -133,6 +160,10 @@ const VALID_REASONING_EFFORTS = new Set<ReasoningEffort>([
 const VALID_USAGE_LOG_COUNT_MODES = new Set<UsageLogCountMode>([
   "request",
   "conversation",
+])
+const VALID_CONTEXT_MANAGEMENT_MODES = new Set<ContextManagementMode>([
+  "trim",
+  "summarize_then_trim",
 ])
 
 export function isValidReasoningEffort(
@@ -155,6 +186,72 @@ export function isValidUsageLogCountMode(
 
 export function normalizeUsageLogCountMode(value: unknown): UsageLogCountMode {
   return isValidUsageLogCountMode(value) ? value : "request"
+}
+
+function isValidContextManagementMode(
+  value: unknown,
+): value is ContextManagementMode {
+  return (
+    typeof value === "string"
+    && VALID_CONTEXT_MANAGEMENT_MODES.has(value as ContextManagementMode)
+  )
+}
+
+function normalizeRatio(value: unknown, fallback: number): number {
+  return (
+      typeof value === "number"
+        && Number.isFinite(value)
+        && value > 0
+        && value <= 1
+    ) ?
+      value
+    : fallback
+}
+
+function normalizePositiveInteger(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ?
+      Math.floor(value)
+    : fallback
+}
+
+export function getContextManagementConfig(): ResolvedContextManagementConfig {
+  const defaults = defaultConfig.contextManagement as Required<
+    Omit<ContextManagementConfig, "summarizerModel">
+  >
+  const configured = getConfig().contextManagement ?? {}
+  const mode =
+    isValidContextManagementMode(configured.mode) ?
+      configured.mode
+    : defaults.mode
+  const summarizeAtRatio = normalizeRatio(
+    configured.summarizeAtRatio,
+    defaults.summarizeAtRatio,
+  )
+  const targetRatio = Math.min(
+    normalizeRatio(configured.targetRatio, defaults.targetRatio),
+    Math.max(summarizeAtRatio - 0.05, 0.1),
+  )
+  const keepRecentTurns = normalizePositiveInteger(
+    configured.keepRecentTurns,
+    defaults.keepRecentTurns,
+  )
+  const summaryMaxTokens = Math.max(
+    256,
+    normalizePositiveInteger(
+      configured.summaryMaxTokens,
+      defaults.summaryMaxTokens,
+    ),
+  )
+  const summarizerModel = configured.summarizerModel?.trim()
+
+  return {
+    mode,
+    summarizeAtRatio,
+    targetRatio,
+    keepRecentTurns,
+    summaryMaxTokens,
+    ...(summarizerModel && { summarizerModel }),
+  }
 }
 
 function ensureConfigFile(): void {

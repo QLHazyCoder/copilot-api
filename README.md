@@ -213,6 +213,7 @@ The admin panel includes five tabs: `Accounts`, `Models`, `Usage`, `Model Mappin
 
 ### Settings
 - Edit global rate-limit and related admin settings (env vars still take precedence).
+- Enable server-side automatic context compression and tune the user-facing trigger settings.
 - Configure `anthropicApiKey` in the page for official Claude `/v1/messages/count_tokens` accuracy.
 - View Admin security status, session lifetime, and the current management-secret source.
 - Includes Usage test interval configuration.
@@ -367,6 +368,14 @@ The configuration file is stored at `/data/copilot-api/config.json` inside the c
   "modelReasoningEfforts": {
     "gpt-5-mini": "xhigh"
   },
+  "contextManagement": {
+    "mode": "summarize_then_trim",
+    "summarizeAtRatio": 0.8,
+    "targetRatio": 0.55,
+    "keepRecentTurns": 4,
+    "summaryMaxTokens": 2048,
+    "summarizerModel": "gpt-5-mini"
+  },
   "anthropicApiKey": "sk-ant-..."
 }
 ```
@@ -385,6 +394,7 @@ The configuration file is stored at `/data/copilot-api/config.json` inside the c
 | `modelCardMetadata` | Extended model-card metadata (e.g. context window / features) |
 | `hiddenModels` | Models hidden in the Admin UI |
 | `useFunctionApplyPatch` | Whether `apply_patch` is normalized to a `function` tool (enabled by default) |
+| `contextManagement` | Context-window strategy. Default `mode` is `trim`; `summarize_then_trim` summarizes older turns at `summarizeAtRatio` before falling back to old-turn trimming |
 | `anthropicApiKey` | Optional Anthropic API key used for accurate Claude `/v1/messages/count_tokens` forwarding |
 | `auth.apiKey` | Optional gateway API key; when configured, requests must include `x-api-key` or `Authorization: Bearer <key>` |
 | `rateLimitSeconds` | Saved global minimum interval between requests when `RATE_LIMIT` env is not set |

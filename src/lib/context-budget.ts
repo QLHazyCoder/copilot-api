@@ -24,6 +24,16 @@ import type { Model } from "~/services/copilot/get-models"
 import { translateToOpenAI } from "~/routes/messages/non-stream-translation"
 
 import { getConfig } from "./config"
+import {
+  createAnthropicSummaryMessage,
+  createChatSummaryMessage,
+  createResponsesSummaryMessage,
+  maybeCompressSegments,
+  serializeAnthropicMessage,
+  serializeChatMessage,
+  serializeResponseInputItem,
+  type ContextTrimSegment,
+} from "./context-compression"
 import { ContextOverflowError } from "./copilot-error"
 import { createHandlerLogger } from "./logger"
 import { getPromptTokenCount } from "./tokenizer"
@@ -43,10 +53,7 @@ interface PromptBudgetResolution {
   outputTokenReserve: number
 }
 
-interface TrimSegment<T> {
-  items: Array<T>
-  removable: boolean
-}
+type TrimSegment<T> = ContextTrimSegment<T>
 
 interface TrimResult<TPayload> {
   payload: TPayload
@@ -88,11 +95,13 @@ export async function ensureChatPayloadWithinContextWindow(
       messages: keptSegments.flatMap((segment) => segment.items),
     }),
     budget,
+    createSummaryItem: createChatSummaryMessage,
     endpoint: "/chat/completions",
     estimatePromptTokens: (nextPayload) =>
       getPromptTokenCount(nextPayload, model),
     model,
     segments,
+    serializeItem: serializeChatMessage,
   })
 
   return result.payload
@@ -125,6 +134,7 @@ export async function ensureResponsesPayloadWithinContextWindow(
       }),
     }),
     budget,
+    createSummaryItem: createResponsesSummaryMessage,
     endpoint: "/responses",
     estimatePromptTokens: async (nextPayload) =>
       getPromptTokenCount(
@@ -133,6 +143,7 @@ export async function ensureResponsesPayloadWithinContextWindow(
       ),
     model,
     segments,
+    serializeItem: serializeResponseInputItem,
   })
 
   return result.payload
@@ -157,11 +168,13 @@ export async function ensureMessagesPayloadWithinContextWindow(
       messages: keptSegments.flatMap((segment) => segment.items),
     }),
     budget,
+    createSummaryItem: createAnthropicSummaryMessage,
     endpoint: "/v1/messages",
     estimatePromptTokens: async (nextPayload) =>
       getPromptTokenCount(translateToOpenAI(nextPayload), model),
     model,
     segments: buildAnthropicTrimSegments(payload.messages),
+    serializeItem: serializeAnthropicMessage,
   })
 
   return result.payload
@@ -276,17 +289,21 @@ function resolveOutputTokenReserve(
 async function trimSegmentedPayload<TPayload, TItem>({
   buildPayload,
   budget,
+  createSummaryItem,
   endpoint,
   estimatePromptTokens,
   model,
   segments,
+  serializeItem,
 }: {
   buildPayload: (segments: Array<TrimSegment<TItem>>) => TPayload
   budget: PromptBudgetResolution
+  createSummaryItem: (summary: string) => TItem
   endpoint: string
   estimatePromptTokens: (payload: TPayload) => Promise<number>
   model: Model
   segments: Array<TrimSegment<TItem>>
+  serializeItem: (item: TItem) => string
 }): Promise<TrimResult<TPayload>> {
   if (segments.length === 0) {
     const promptTokens = await estimatePromptTokens(buildPayload(segments))
@@ -310,11 +327,21 @@ async function trimSegmentedPayload<TPayload, TItem>({
     }
   }
 
-  const kept = segments.map(() => true)
+  const managedSegments = await maybeCompressSegments({
+    buildPayload,
+    budget,
+    createSummaryItem,
+    endpoint,
+    estimatePromptTokens,
+    model,
+    segments,
+    serializeItem,
+  })
+  const kept = managedSegments.map(() => true)
   let removedSegments = 0
 
   while (true) {
-    const keptSegments = segments.filter((_, index) => kept[index])
+    const keptSegments = managedSegments.filter((_, index) => kept[index])
     const candidatePayload = buildPayload(keptSegments)
     const promptTokens = await estimatePromptTokens(candidatePayload)
 
@@ -342,7 +369,7 @@ async function trimSegmentedPayload<TPayload, TItem>({
     }
 
     const removableIndex = kept.findIndex(
-      (isKept, index) => isKept && segments[index]?.removable,
+      (isKept, index) => isKept && managedSegments[index]?.removable,
     )
 
     if (removableIndex === -1) {

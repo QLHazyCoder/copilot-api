@@ -605,6 +605,12 @@ export const adminScript = `<script>
       const rawAdminSessionTtlDays = document.getElementById('adminSessionTtlDays').value.trim();
       const adminSessionTtlDays = rawAdminSessionTtlDays === '' ? null : Number(rawAdminSessionTtlDays);
       const rateLimitWait = document.getElementById('rateLimitWait').checked;
+      const contextCompressionEnabled = document.getElementById('contextCompressionEnabled').checked;
+      const rawContextCompressionPercent = document.getElementById('contextCompressionPercent').value.trim();
+      const contextCompressionPercent = rawContextCompressionPercent === '' ? null : Number(rawContextCompressionPercent);
+      const rawContextKeepRecentTurns = document.getElementById('contextKeepRecentTurns').value.trim();
+      const contextKeepRecentTurns = rawContextKeepRecentTurns === '' ? null : Number(rawContextKeepRecentTurns);
+      const contextCompressionModel = document.getElementById('contextCompressionModel').value.trim();
       const anthropicApiKey = document.getElementById('anthropicApiKey').value.trim();
       const gatewayApiKey = document.getElementById('gatewayApiKey').value.trim();
       return {
@@ -613,6 +619,12 @@ export const adminScript = `<script>
         rawAdminSessionTtlDays,
         adminSessionTtlDays,
         rateLimitWait,
+        contextCompressionEnabled,
+        rawContextCompressionPercent,
+        contextCompressionPercent,
+        rawContextKeepRecentTurns,
+        contextKeepRecentTurns,
+        contextCompressionModel,
         disableHiddenModels,
         anthropicApiKey,
         gatewayApiKey
@@ -624,9 +636,21 @@ export const adminScript = `<script>
       return left.rateLimitSeconds === right.rateLimitSeconds
         && left.adminSessionTtlDays === right.adminSessionTtlDays
         && left.rateLimitWait === right.rateLimitWait
+        && left.contextCompressionEnabled === right.contextCompressionEnabled
+        && left.contextCompressionPercent === right.contextCompressionPercent
+        && left.contextKeepRecentTurns === right.contextKeepRecentTurns
+        && left.contextCompressionModel === right.contextCompressionModel
         && left.disableHiddenModels === right.disableHiddenModels
         && left.anthropicApiKey === right.anthropicApiKey
         && left.gatewayApiKey === right.gatewayApiKey;
+    }
+
+    function syncContextCompressionInputs() {
+      const enabled = document.getElementById('contextCompressionEnabled').checked;
+      ['contextCompressionPercent', 'contextKeepRecentTurns', 'contextCompressionModel'].forEach(function (id) {
+        const input = document.getElementById(id);
+        if (input) input.disabled = !enabled;
+      });
     }
 
     function updateSettingsDirtyState() {
@@ -653,6 +677,12 @@ export const adminScript = `<script>
         document.getElementById('rateLimitSeconds').value = data.rateLimitSeconds ?? '';
         document.getElementById('adminSessionTtlDays').value = data.adminSessionTtlDays ?? '';
         document.getElementById('rateLimitWait').checked = Boolean(data.rateLimitWait);
+        const contextManagement = data.contextManagement || {};
+        document.getElementById('contextCompressionEnabled').checked = Boolean(contextManagement.enabled);
+        document.getElementById('contextCompressionPercent').value = contextManagement.summarizeAtPercent ?? 80;
+        document.getElementById('contextKeepRecentTurns').value = contextManagement.keepRecentTurns ?? 4;
+        document.getElementById('contextCompressionModel').value = contextManagement.summarizerModel ?? '';
+        syncContextCompressionInputs();
         disableHiddenModels = Boolean(data.disableHiddenModels);
         const disableHiddenModelsToggle = document.getElementById('disableHiddenModelsToggle');
         if (disableHiddenModelsToggle) {
@@ -689,6 +719,16 @@ export const adminScript = `<script>
               null
             : Number(data.adminSessionTtlDays),
           rateLimitWait: Boolean(data.rateLimitWait),
+          contextCompressionEnabled: Boolean(contextManagement.enabled),
+          contextCompressionPercent:
+            contextManagement.summarizeAtPercent === null || contextManagement.summarizeAtPercent === undefined ?
+              80
+            : Number(contextManagement.summarizeAtPercent),
+          contextKeepRecentTurns:
+            contextManagement.keepRecentTurns === null || contextManagement.keepRecentTurns === undefined ?
+              4
+            : Number(contextManagement.keepRecentTurns),
+          contextCompressionModel: contextManagement.summarizerModel ?? '',
           disableHiddenModels,
           anthropicApiKey: '',
           gatewayApiKey: ''
@@ -711,6 +751,7 @@ export const adminScript = `<script>
         if (disableHiddenModelsToggle) {
           disableHiddenModelsToggle.disabled = false;
         }
+        syncContextCompressionInputs();
         renderAdminSecurityInfo(null);
         document.getElementById('settingsNotice').textContent = t('settings.failedLoad');
         updateSettingsDirtyState();
@@ -741,12 +782,43 @@ export const adminScript = `<script>
         return;
       }
 
+      if (
+        currentState.rawContextCompressionPercent !== ''
+        && (
+          !Number.isFinite(currentState.contextCompressionPercent)
+          || currentState.contextCompressionPercent < 50
+          || currentState.contextCompressionPercent > 95
+        )
+      ) {
+        alert(t('settings.validationContextCompressionPercent'));
+        return;
+      }
+
+      if (
+        currentState.rawContextKeepRecentTurns !== ''
+        && (
+          !Number.isFinite(currentState.contextKeepRecentTurns)
+          || currentState.contextKeepRecentTurns < 1
+          || currentState.contextKeepRecentTurns > 20
+          || !Number.isInteger(currentState.contextKeepRecentTurns)
+        )
+      ) {
+        alert(t('settings.validationContextKeepRecentTurns'));
+        return;
+      }
+
       btn.disabled = true;
       try {
         const requestBody = {
           rateLimitSeconds: currentState.rateLimitSeconds,
           adminSessionTtlDays: currentState.adminSessionTtlDays,
           rateLimitWait: currentState.rateLimitWait,
+          contextManagement: {
+            enabled: currentState.contextCompressionEnabled,
+            summarizeAtPercent: currentState.contextCompressionPercent,
+            keepRecentTurns: currentState.contextKeepRecentTurns,
+            summarizerModel: currentState.contextCompressionModel || null
+          },
           disableHiddenModels: currentState.disableHiddenModels
         };
         if (currentState.anthropicApiKey !== '') {
@@ -3001,6 +3073,13 @@ export const adminScript = `<script>
     document.getElementById('rateLimitSeconds').addEventListener('input', updateSettingsDirtyState);
     document.getElementById('adminSessionTtlDays').addEventListener('input', updateSettingsDirtyState);
     document.getElementById('rateLimitWait').addEventListener('change', updateSettingsDirtyState);
+    document.getElementById('contextCompressionEnabled').addEventListener('change', function () {
+      syncContextCompressionInputs();
+      updateSettingsDirtyState();
+    });
+    document.getElementById('contextCompressionPercent').addEventListener('input', updateSettingsDirtyState);
+    document.getElementById('contextKeepRecentTurns').addEventListener('input', updateSettingsDirtyState);
+    document.getElementById('contextCompressionModel').addEventListener('input', updateSettingsDirtyState);
     document.getElementById('anthropicApiKey').addEventListener('input', updateSettingsDirtyState);
     document.getElementById('gatewayApiKey').addEventListener('input', updateSettingsDirtyState);
     document.getElementById('clearAnthropicApiKeyBtn').addEventListener('click', function () {
