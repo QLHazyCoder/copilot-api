@@ -11,9 +11,9 @@ describe("admin auth helpers", () => {
     const secretHash = await hashAdminSecret("super-secret-value")
 
     expect(secretHash.startsWith("scrypt$")).toBe(true)
-    expect(
-      await verifyAdminSecretHash("super-secret-value", secretHash),
-    ).toBe(true)
+    expect(await verifyAdminSecretHash("super-secret-value", secretHash)).toBe(
+      true,
+    )
     expect(await verifyAdminSecretHash("wrong-secret", secretHash)).toBe(false)
   })
 

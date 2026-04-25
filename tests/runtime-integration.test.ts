@@ -166,15 +166,18 @@ function createTestApp(path: "/admin" | "/usage"): Hono {
 }
 
 async function createAdminSessionCookie(app: Hono): Promise<string> {
-  const response = await app.request("http://localhost/admin/api/session/login", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
+  const response = await app.request(
+    "http://localhost/admin/api/session/login",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        secret: adminSecret,
+      }),
     },
-    body: JSON.stringify({
-      secret: adminSecret,
-    }),
-  })
+  )
 
   const setCookie = response.headers.get("set-cookie")
   if (!setCookie) {

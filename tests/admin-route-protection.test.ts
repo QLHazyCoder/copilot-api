@@ -21,7 +21,12 @@ function createAdminApp(): Hono {
 function getCookieHeader(response: Response): string {
   const setCookie = response.headers.get("set-cookie")
   expect(setCookie).toBeTruthy()
-  return setCookie!.split(";")[0]
+
+  if (!setCookie) {
+    throw new Error("expected set-cookie header")
+  }
+
+  return setCookie.split(";")[0]
 }
 
 beforeEach(async () => {
@@ -83,16 +88,19 @@ describe("admin route protection", () => {
   test("supports localhost admin secret setup and creates a session", async () => {
     const app = createAdminApp()
 
-    const setupResponse = await app.request("http://localhost/admin/api/setup", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
+    const setupResponse = await app.request(
+      "http://localhost/admin/api/setup",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          secret: "setup-secret-value",
+          confirmSecret: "setup-secret-value",
+        }),
       },
-      body: JSON.stringify({
-        secret: "setup-secret-value",
-        confirmSecret: "setup-secret-value",
-      }),
-    })
+    )
 
     expect(setupResponse.status).toBe(200)
     const cookie = getCookieHeader(setupResponse)
@@ -153,11 +161,14 @@ describe("admin route protection", () => {
     )
     expect(settingsResponse.status).toBe(200)
 
-    const loginPageResponse = await app.request("http://localhost/admin/login", {
-      headers: {
-        cookie,
+    const loginPageResponse = await app.request(
+      "http://localhost/admin/login",
+      {
+        headers: {
+          cookie,
+        },
       },
-    })
+    )
     expect(loginPageResponse.status).toBe(302)
     expect(loginPageResponse.headers.get("location")).toBe("/admin")
 
@@ -212,24 +223,30 @@ describe("admin route protection", () => {
 
     const cookie = getCookieHeader(loginResponse)
 
-    const updateResponse = await app.request("http://localhost/admin/api/settings", {
-      method: "PUT",
-      headers: {
-        cookie,
-        "content-type": "application/json",
+    const updateResponse = await app.request(
+      "http://localhost/admin/api/settings",
+      {
+        method: "PUT",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          adminSessionTtlDays: 9,
+        }),
       },
-      body: JSON.stringify({
-        adminSessionTtlDays: 9,
-      }),
-    })
+    )
 
     expect(updateResponse.status).toBe(200)
 
-    const settingsResponse = await app.request("http://localhost/admin/api/settings", {
-      headers: {
-        cookie,
+    const settingsResponse = await app.request(
+      "http://localhost/admin/api/settings",
+      {
+        headers: {
+          cookie,
+        },
       },
-    })
+    )
 
     expect(settingsResponse.status).toBe(200)
     const settingsPayload = (await settingsResponse.json()) as {

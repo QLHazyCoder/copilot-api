@@ -1,5 +1,5 @@
 /* eslint-disable max-lines */
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 
 import {
   addAccount,
@@ -59,10 +59,10 @@ import { getDeviceCode } from "~/services/github/get-device-code"
 import { getGitHubUser } from "~/services/github/get-user"
 import { pollAccessTokenOnce } from "~/services/github/poll-access-token"
 
+import { resolveAuthPageLocale, type AuthSetupMode } from "./auth-page-i18n"
 import { adminHtml } from "./html"
 import { renderAdminLoginHtml } from "./login-html"
 import { adminAccessMiddleware } from "./middleware"
-import { resolveAuthPageLocale } from "./auth-page-i18n"
 import { renderAdminSetupHtml } from "./setup-html"
 
 export const adminRoutes = new Hono()
@@ -646,6 +646,218 @@ async function getPremiumModelConfigSnapshot(): Promise<PremiumModelConfigSnapsh
   }
 }
 
+function resolveAdminSetupMode(adminStatus: {
+  configured: boolean
+  secretManagedInApp: boolean
+}): AuthSetupMode {
+  if (!adminStatus.configured) {
+    return "initial"
+  }
+
+  if (adminStatus.secretManagedInApp) {
+    return "rotate"
+  }
+
+  return "readonly"
+}
+
+function getAdminSettingsResponse(config: ReturnType<typeof getConfig>): {
+  rateLimitSeconds: number | null
+  rateLimitWait: boolean
+  adminSessionTtlDays: number
+  usageTestIntervalMinutes: number | null
+  usageLogCountMode: UsageLogCountMode
+  disableHiddenModels: boolean
+  hasAnthropicApiKey: boolean
+  hasAuthApiKey: boolean
+  adminAuth: {
+    configured: boolean
+    secretSource: ReturnType<typeof getAdminAuthStatus>["secretSource"]
+    secretManagedInApp: boolean
+    sessionTtlDays: number
+    enforceHttps: boolean
+  }
+  envOverride: {
+    rateLimitSeconds: boolean
+    rateLimitWait: boolean
+  }
+} {
+  const authApiKey = getCurrentAuthApiKey(config)
+  const usageTestIntervalMinutes =
+    config.usageTestIntervalMinutes === undefined ?
+      10
+    : config.usageTestIntervalMinutes
+  const adminAuthStatus = getAdminAuthStatus()
+
+  return {
+    rateLimitSeconds: config.rateLimitSeconds ?? null,
+    rateLimitWait: config.rateLimitWait ?? false,
+    adminSessionTtlDays: config.adminAuth?.sessionTtlDays ?? 5,
+    usageTestIntervalMinutes,
+    usageLogCountMode: getUsageLogCountMode(),
+    disableHiddenModels: config.disableHiddenModels ?? false,
+    hasAnthropicApiKey: Boolean(config.anthropicApiKey?.trim()),
+    hasAuthApiKey: Boolean(authApiKey),
+    adminAuth: {
+      configured: adminAuthStatus.configured,
+      secretSource: adminAuthStatus.secretSource,
+      secretManagedInApp: adminAuthStatus.secretManagedInApp,
+      sessionTtlDays: adminAuthStatus.sessionTtlDays,
+      enforceHttps: adminAuthStatus.enforceHttps,
+    },
+    envOverride: {
+      rateLimitSeconds: process.env.RATE_LIMIT !== undefined,
+      rateLimitWait: process.env.RATE_LIMIT_WAIT !== undefined,
+    },
+  }
+}
+
+function createValidationErrorResponse(c: Context, message: string): Response {
+  return c.json(
+    {
+      error: {
+        message,
+        type: "validation_error",
+      },
+    },
+    400,
+  )
+}
+
+function validateAdminSettings(
+  c: Context,
+  body: AdminSettingsRequestBody,
+  config: ReturnType<typeof getConfig>,
+):
+  | {
+      adminSessionTtlDays: number | undefined
+      anthropicApiKey: string | undefined
+      authApiKey: string | undefined
+      disableHiddenModels: boolean
+      rateLimitSeconds: number | undefined
+      rateLimitWait: boolean
+      usageLogCountMode: UsageLogCountMode
+      usageTestIntervalMinutes: number | null | undefined
+    }
+  | Response {
+  const rateLimitSeconds = resolveNullableConfigValue(
+    body.rateLimitSeconds,
+    config.rateLimitSeconds,
+  )
+
+  if (!isValidPositiveNumber(rateLimitSeconds)) {
+    return createValidationErrorResponse(
+      c,
+      '"rateLimitSeconds" must be a number greater than 0',
+    )
+  }
+
+  const adminSessionTtlDays = resolveNullableConfigValue(
+    body.adminSessionTtlDays,
+    config.adminAuth?.sessionTtlDays,
+  )
+  if (!isValidPositiveInteger(adminSessionTtlDays)) {
+    return createValidationErrorResponse(
+      c,
+      '"adminSessionTtlDays" must be an integer greater than 0',
+    )
+  }
+
+  const usageTestIntervalMinutes = resolveUsageTestIntervalMinutes(
+    body.usageTestIntervalMinutes,
+    config.usageTestIntervalMinutes,
+  )
+  if (!isValidUsageTestIntervalMinutes(usageTestIntervalMinutes)) {
+    return createValidationErrorResponse(
+      c,
+      '"usageTestIntervalMinutes" must be an integer greater than 0',
+    )
+  }
+
+  if (
+    body.usageLogCountMode !== undefined
+    && !isValidUsageLogCountMode(body.usageLogCountMode)
+  ) {
+    return createValidationErrorResponse(
+      c,
+      '"usageLogCountMode" must be either "request" or "conversation"',
+    )
+  }
+
+  return {
+    rateLimitSeconds,
+    rateLimitWait: body.rateLimitWait ?? config.rateLimitWait ?? false,
+    adminSessionTtlDays,
+    usageTestIntervalMinutes,
+    usageLogCountMode: body.usageLogCountMode ?? getUsageLogCountMode(),
+    disableHiddenModels:
+      body.disableHiddenModels ?? config.disableHiddenModels ?? false,
+    anthropicApiKey: resolveAnthropicApiKey(
+      body,
+      config.anthropicApiKey?.trim() || undefined,
+    ),
+    authApiKey: resolveAuthApiKey(body, getCurrentAuthApiKey(config)),
+  }
+}
+
+async function updateAdminSettings(settings: {
+  adminSessionTtlDays: number | undefined
+  anthropicApiKey: string | undefined
+  authApiKey: string | undefined
+  disableHiddenModels: boolean
+  rateLimitSeconds: number | undefined
+  rateLimitWait: boolean
+  usageLogCountMode: UsageLogCountMode
+  usageTestIntervalMinutes: number | null | undefined
+}): Promise<void> {
+  await updateConfig((config) => ({
+    ...config,
+    auth: {
+      ...config.auth,
+      apiKey: settings.authApiKey,
+      apiKeys: settings.authApiKey ? [settings.authApiKey] : [],
+    },
+    adminAuth: {
+      ...config.adminAuth,
+      sessionTtlDays: settings.adminSessionTtlDays,
+    },
+    rateLimitSeconds: settings.rateLimitSeconds,
+    rateLimitWait: settings.rateLimitWait,
+    usageTestIntervalMinutes: settings.usageTestIntervalMinutes,
+    usageLogCountMode: settings.usageLogCountMode,
+    disableHiddenModels: settings.disableHiddenModels,
+    anthropicApiKey: settings.anthropicApiKey,
+  }))
+}
+
+function createAdminSettingsSuccessResponse(
+  c: Context,
+  settings: {
+    adminSessionTtlDays: number | undefined
+    anthropicApiKey: string | undefined
+    authApiKey: string | undefined
+    disableHiddenModels: boolean
+    rateLimitSeconds: number | undefined
+    rateLimitWait: boolean
+    usageLogCountMode: UsageLogCountMode
+    usageTestIntervalMinutes: number | null | undefined
+  },
+): Response {
+  return c.json({
+    success: true,
+    settings: {
+      rateLimitSeconds: settings.rateLimitSeconds ?? null,
+      rateLimitWait: settings.rateLimitWait,
+      adminSessionTtlDays: settings.adminSessionTtlDays ?? 5,
+      usageTestIntervalMinutes: settings.usageTestIntervalMinutes ?? null,
+      usageLogCountMode: settings.usageLogCountMode,
+      disableHiddenModels: settings.disableHiddenModels,
+      hasAnthropicApiKey: Boolean(settings.anthropicApiKey),
+      hasAuthApiKey: Boolean(settings.authApiKey),
+    },
+  })
+}
+
 adminRoutes.get("/login", (c) => {
   if (!getAdminAuthStatus().configured) {
     return c.redirect("/admin/setup", 302)
@@ -672,10 +884,7 @@ adminRoutes.get("/setup", async (c) => {
     acceptLanguage: c.req.header("accept-language"),
     queryLang: c.req.query("lang"),
   })
-  const mode =
-    !adminStatus.configured ? "initial"
-    : adminStatus.secretManagedInApp ? "rotate"
-    : "readonly"
+  const mode = resolveAdminSetupMode(adminStatus)
 
   return c.html(
     renderAdminSetupHtml({
@@ -736,7 +945,7 @@ adminRoutes.post("/api/session/login", async (c) => {
 
   const body = await c.req
     .json<AdminLoginRequestBody>()
-    .catch(() => ({} as AdminLoginRequestBody))
+    .catch(() => ({}) as AdminLoginRequestBody)
   const validation = validateAdminSecret(body.secret ?? "")
   if (!validation.valid) {
     recordAdminLoginFailure(c)
@@ -811,7 +1020,7 @@ adminRoutes.post("/api/setup", async (c) => {
 
   const body = await c.req
     .json<AdminSetupRequestBody>()
-    .catch(() => ({} as AdminSetupRequestBody))
+    .catch(() => ({}) as AdminSetupRequestBody)
   const validation = validateAdminSecret(body.secret ?? "")
   if (!validation.valid) {
     return c.json(
@@ -1538,155 +1747,22 @@ adminRoutes.put("/api/model-visibility/:model", async (c) => {
 })
 
 adminRoutes.get("/api/settings", (c) => {
-  const config = getConfig()
-  const authApiKey = getCurrentAuthApiKey(config)
-  const usageTestIntervalMinutes =
-    config.usageTestIntervalMinutes === undefined ?
-      10
-    : config.usageTestIntervalMinutes
-  const adminAuthStatus = getAdminAuthStatus()
-
-  return c.json({
-    rateLimitSeconds: config.rateLimitSeconds ?? null,
-    rateLimitWait: config.rateLimitWait ?? false,
-    adminSessionTtlDays: config.adminAuth?.sessionTtlDays ?? 5,
-    usageTestIntervalMinutes,
-    usageLogCountMode: getUsageLogCountMode(),
-    disableHiddenModels: config.disableHiddenModels ?? false,
-    hasAnthropicApiKey: Boolean(config.anthropicApiKey?.trim()),
-    hasAuthApiKey: Boolean(authApiKey),
-    adminAuth: {
-      configured: adminAuthStatus.configured,
-      secretSource: adminAuthStatus.secretSource,
-      secretManagedInApp: adminAuthStatus.secretManagedInApp,
-      sessionTtlDays: adminAuthStatus.sessionTtlDays,
-      enforceHttps: adminAuthStatus.enforceHttps,
-    },
-    envOverride: {
-      rateLimitSeconds: process.env.RATE_LIMIT !== undefined,
-      rateLimitWait: process.env.RATE_LIMIT_WAIT !== undefined,
-    },
-  })
+  return c.json(getAdminSettingsResponse(getConfig()))
 })
 
 adminRoutes.put("/api/settings", async (c) => {
   const body = await c.req.json<AdminSettingsRequestBody>()
-
   const config = getConfig()
+  const settings = validateAdminSettings(c, body, config)
 
-  const rateLimitSeconds = resolveNullableConfigValue(
-    body.rateLimitSeconds,
-    config.rateLimitSeconds,
-  )
-
-  if (!isValidPositiveNumber(rateLimitSeconds)) {
-    return c.json(
-      {
-        error: {
-          message: '"rateLimitSeconds" must be a number greater than 0',
-          type: "validation_error",
-        },
-      },
-      400,
-    )
+  if (settings instanceof Response) {
+    return settings
   }
 
-  const rateLimitWait = body.rateLimitWait ?? config.rateLimitWait ?? false
-  const disableHiddenModels =
-    body.disableHiddenModels ?? config.disableHiddenModels ?? false
-  const adminSessionTtlDays = resolveNullableConfigValue(
-    body.adminSessionTtlDays,
-    config.adminAuth?.sessionTtlDays,
-  )
+  await updateAdminSettings(settings)
+  syncRateLimitState(settings.rateLimitSeconds, settings.rateLimitWait)
 
-  if (!isValidPositiveInteger(adminSessionTtlDays)) {
-    return c.json(
-      {
-        error: {
-          message: '"adminSessionTtlDays" must be an integer greater than 0',
-          type: "validation_error",
-        },
-      },
-      400,
-    )
-  }
-
-  const usageTestIntervalMinutes = resolveUsageTestIntervalMinutes(
-    body.usageTestIntervalMinutes,
-    config.usageTestIntervalMinutes,
-  )
-
-  if (!isValidUsageTestIntervalMinutes(usageTestIntervalMinutes)) {
-    return c.json(
-      {
-        error: {
-          message:
-            '"usageTestIntervalMinutes" must be an integer greater than 0',
-          type: "validation_error",
-        },
-      },
-      400,
-    )
-  }
-
-  if (
-    body.usageLogCountMode !== undefined
-    && !isValidUsageLogCountMode(body.usageLogCountMode)
-  ) {
-    return c.json(
-      {
-        error: {
-          message:
-            '"usageLogCountMode" must be either "request" or "conversation"',
-          type: "validation_error",
-        },
-      },
-      400,
-    )
-  }
-
-  const anthropicApiKey = resolveAnthropicApiKey(
-    body,
-    config.anthropicApiKey?.trim() || undefined,
-  )
-  const authApiKey = resolveAuthApiKey(body, getCurrentAuthApiKey(config))
-
-  const usageLogCountMode = body.usageLogCountMode ?? getUsageLogCountMode()
-
-  await updateConfig((config) => ({
-    ...config,
-    auth: {
-      ...config.auth,
-      apiKey: authApiKey,
-      apiKeys: authApiKey ? [authApiKey] : [],
-    },
-    adminAuth: {
-      ...config.adminAuth,
-      sessionTtlDays: adminSessionTtlDays,
-    },
-    rateLimitSeconds,
-    rateLimitWait,
-    usageTestIntervalMinutes,
-    usageLogCountMode,
-    disableHiddenModels,
-    anthropicApiKey,
-  }))
-
-  syncRateLimitState(rateLimitSeconds, rateLimitWait)
-
-  return c.json({
-    success: true,
-    settings: {
-      rateLimitSeconds: rateLimitSeconds ?? null,
-      rateLimitWait,
-      adminSessionTtlDays: adminSessionTtlDays ?? 5,
-      usageTestIntervalMinutes: usageTestIntervalMinutes ?? null,
-      usageLogCountMode,
-      disableHiddenModels,
-      hasAnthropicApiKey: Boolean(anthropicApiKey),
-      hasAuthApiKey: Boolean(authApiKey),
-    },
-  })
+  return createAdminSettingsSuccessResponse(c, settings)
 })
 
 adminRoutes.get("/api/models", async (c) => {

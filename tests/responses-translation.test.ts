@@ -3,12 +3,32 @@ import { describe, expect, it } from "bun:test"
 import type { AnthropicMessagesPayload } from "~/routes/messages/anthropic-types"
 import type {
   ResponsesResult,
+  ResponseInputItem,
+  ResponseInputMessage,
+  ResponseInputText,
 } from "~/services/copilot/create-responses"
 
 import {
   translateAnthropicMessagesToResponsesPayload,
   translateResponsesResultToAnthropic,
 } from "~/routes/messages/responses-translation"
+
+function isResponseInputMessage(
+  value: ResponseInputItem,
+): value is ResponseInputMessage {
+  return "role" in value && "type" in value && value.type === "message"
+}
+
+function isResponseInputText(value: unknown): value is ResponseInputText {
+  return (
+    typeof value === "object"
+    && value !== null
+    && "type" in value
+    && (value.type === "input_text" || value.type === "output_text")
+    && "text" in value
+    && typeof value.text === "string"
+  )
+}
 
 const samplePayload = {
   model: "claude-3-5-sonnet",
@@ -50,33 +70,19 @@ describe("translateAnthropicMessagesToResponsesPayload", () => {
     const result = translateAnthropicMessagesToResponsesPayload(samplePayload)
 
     if (!Array.isArray(result.input)) {
-      throw new Error("expected input array")
+      throw new TypeError("expected input array")
     }
 
     const input = result.input
     expect(input).toHaveLength(1)
 
-    const message = input[0]
-    if (
-      !message
-      || typeof message !== "object"
-      || !("role" in message)
-      || message.role !== "user"
-      || !("type" in message)
-      || message.type !== "message"
-      || !("content" in message)
-      || !Array.isArray(message.content)
-    ) {
-      throw new Error("expected user message with content array")
+    const [message] = input
+    if (!isResponseInputMessage(message) || !Array.isArray(message.content)) {
+      throw new TypeError("expected user message with content array")
     }
 
     const textContent = message.content.flatMap((item) => {
-      if (
-        item
-        && typeof item === "object"
-        && "text" in item
-        && typeof item.text === "string"
-      ) {
+      if (isResponseInputText(item)) {
         return [item.text]
       }
 

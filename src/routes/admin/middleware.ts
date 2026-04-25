@@ -3,17 +3,30 @@ import type { Context, Next } from "hono"
 import {
   getAdminAuthStatus,
   getAdminSessionState,
+  isAdminWriteMethod,
   isLocalhostRequest,
   isSameOriginAdminRequest,
   isSecureRequest,
-  isAdminWriteMethod,
   shouldEnforceAdminHttps,
 } from "~/lib/admin-auth"
 
+interface AdminJsonErrorOptions {
+  message: string
+  status: 401 | 403 | 428
+  type: string
+}
+
+interface AdminRequestContext {
+  isApiRequest: boolean
+  subPath: string
+}
+
 function getAdminSubPath(c: Context): string {
-  return c.req.path.startsWith("/admin") ?
-      (c.req.path.slice("/admin".length) || "/")
-    : c.req.path
+  if (!c.req.path.startsWith("/admin")) {
+    return c.req.path
+  }
+
+  return c.req.path.slice("/admin".length) || "/"
 }
 
 function isAdminApiRequest(c: Context): boolean {
@@ -30,22 +43,24 @@ function isPublicRoute(subPath: string): boolean {
 
 function createAdminJsonError(
   c: Context,
-  status: number,
-  message: string,
-  type: string,
+  options: AdminJsonErrorOptions,
 ): Response {
   return c.json(
     {
       error: {
-        message,
-        type,
+        message: options.message,
+        type: options.type,
       },
     },
-    status as 401 | 403 | 428,
+    options.status,
   )
 }
 
-function createAdminHtmlError(c: Context, status: number, title: string): Response {
+function createAdminHtmlError(
+  c: Context,
+  status: number,
+  title: string,
+): Response {
   return c.html(
     `<!DOCTYPE html>
 <html lang="en">
@@ -114,81 +129,194 @@ function redirectToAdminPage(
   return c.redirect(targetPath, 302)
 }
 
+interface AdminErrorResponseOptions {
+  htmlTitle: string
+  jsonError: AdminJsonErrorOptions
+  redirectPath?: "/admin" | "/admin/login" | "/admin/setup"
+}
+
+function respondAdminError(
+  c: Context,
+  requestContext: AdminRequestContext,
+  options: AdminErrorResponseOptions,
+): Response {
+  if (requestContext.isApiRequest) {
+    return createAdminJsonError(c, options.jsonError)
+  }
+
+  if (options.redirectPath) {
+    return redirectToAdminPage(c, options.redirectPath)
+  }
+
+  return createAdminHtmlError(c, options.jsonError.status, options.htmlTitle)
+}
+
+function handleUnconfiguredAdminAccess(
+  c: Context,
+  requestContext: AdminRequestContext,
+): Response | null {
+  if (!isLocalhostRequest(c)) {
+    return respondAdminError(c, requestContext, {
+      htmlTitle: "Admin setup is restricted to localhost",
+      jsonError: {
+        message:
+          "Forbidden: Admin setup is only accessible from localhost until a management secret is configured",
+        status: 403,
+        type: "forbidden",
+      },
+    })
+  }
+
+  const canAccessSetupRoute =
+    requestContext.subPath === "/setup"
+    || requestContext.subPath === "/api/setup"
+    || requestContext.subPath === "/api/session"
+
+  if (canAccessSetupRoute) {
+    return null
+  }
+
+  return respondAdminError(c, requestContext, {
+    htmlTitle: "Admin setup is required",
+    jsonError: {
+      message: "Admin secret is not configured yet. Complete setup first.",
+      status: 428,
+      type: "setup_required",
+    },
+    redirectPath: "/admin/setup",
+  })
+}
+
+function handleHttpsRequirement(
+  c: Context,
+  requestContext: AdminRequestContext,
+): Response | null {
+  if (
+    !shouldEnforceAdminHttps()
+    || isLocalhostRequest(c)
+    || isSecureRequest(c)
+  ) {
+    return null
+  }
+
+  return respondAdminError(c, requestContext, {
+    htmlTitle: "HTTPS is required for Admin access",
+    jsonError: {
+      message: "Forbidden: Admin authentication requires HTTPS",
+      status: 403,
+      type: "https_required",
+    },
+  })
+}
+
+function handlePublicRouteAccess(
+  c: Context,
+  requestContext: AdminRequestContext,
+  authenticated: boolean,
+): Response | null {
+  if (!isPublicRoute(requestContext.subPath)) {
+    return null
+  }
+
+  if (authenticated && requestContext.subPath === "/login") {
+    return redirectToAdminPage(c, "/admin")
+  }
+
+  return null
+}
+
+function handleAuthenticationRequirement(
+  c: Context,
+  requestContext: AdminRequestContext,
+  authenticated: boolean,
+): Response | null {
+  if (authenticated || isPublicRoute(requestContext.subPath)) {
+    return null
+  }
+
+  return respondAdminError(c, requestContext, {
+    htmlTitle: "Admin login required",
+    jsonError: {
+      message: "Unauthorized: Admin login required",
+      status: 401,
+      type: "authentication_error",
+    },
+    redirectPath: "/admin/login",
+  })
+}
+
+function handleSameOriginRequirement(
+  c: Context,
+  requestContext: AdminRequestContext,
+): Response | null {
+  if (
+    !requestContext.isApiRequest
+    || !isAdminWriteMethod(c.req.method)
+    || isSameOriginAdminRequest(c)
+  ) {
+    return null
+  }
+
+  return createAdminJsonError(c, {
+    message: "Forbidden: Cross-origin admin write request rejected",
+    status: 403,
+    type: "forbidden",
+  })
+}
+
 export async function adminAccessMiddleware(
   c: Context,
   next: Next,
 ): Promise<Response | undefined> {
-  const subPath = getAdminSubPath(c)
-  const isApiRequest = isAdminApiRequest(c)
+  const requestContext: AdminRequestContext = {
+    isApiRequest: isAdminApiRequest(c),
+    subPath: getAdminSubPath(c),
+  }
   const adminStatus = getAdminAuthStatus()
 
   if (!adminStatus.configured) {
-    if (!isLocalhostRequest(c)) {
-      return isApiRequest ?
-          createAdminJsonError(
-            c,
-            403,
-            "Forbidden: Admin setup is only accessible from localhost until a management secret is configured",
-            "forbidden",
-          )
-        : createAdminHtmlError(c, 403, "Admin setup is restricted to localhost")
-    }
-
-    if (subPath !== "/setup" && subPath !== "/api/setup" && subPath !== "/api/session") {
-      return isApiRequest ?
-          createAdminJsonError(
-            c,
-            428,
-            "Admin secret is not configured yet. Complete setup first.",
-            "setup_required",
-          )
-        : redirectToAdminPage(c, "/admin/setup")
+    const response = handleUnconfiguredAdminAccess(c, requestContext)
+    if (response) {
+      return response
     }
 
     await next()
     return undefined
   }
 
-  if (shouldEnforceAdminHttps() && !isLocalhostRequest(c) && !isSecureRequest(c)) {
-    return isApiRequest ?
-        createAdminJsonError(
-          c,
-          403,
-          "Forbidden: Admin authentication requires HTTPS",
-          "https_required",
-        )
-      : createAdminHtmlError(c, 403, "HTTPS is required for Admin access")
+  const httpsResponse = handleHttpsRequirement(c, requestContext)
+  if (httpsResponse) {
+    return httpsResponse
   }
 
   const sessionState = await getAdminSessionState(c)
 
-  if (isPublicRoute(subPath)) {
-    if (sessionState.authenticated && subPath === "/login") {
-      return redirectToAdminPage(c, "/admin")
-    }
+  const publicRouteResponse = handlePublicRouteAccess(
+    c,
+    requestContext,
+    sessionState.authenticated,
+  )
+  if (publicRouteResponse) {
+    return publicRouteResponse
+  }
 
+  if (isPublicRoute(requestContext.subPath)) {
     await next()
     return undefined
   }
 
-  if (!sessionState.authenticated) {
-    return isApiRequest ?
-        createAdminJsonError(
-          c,
-          401,
-          "Unauthorized: Admin login required",
-          "authentication_error",
-        )
-      : redirectToAdminPage(c, "/admin/login")
+  const authResponse = handleAuthenticationRequirement(
+    c,
+    requestContext,
+    sessionState.authenticated,
+  )
+  if (authResponse) {
+    return authResponse
   }
 
-  if (isApiRequest && isAdminWriteMethod(c.req.method) && !isSameOriginAdminRequest(c)) {
-    return createAdminJsonError(
-      c,
-      403,
-      "Forbidden: Cross-origin admin write request rejected",
-      "forbidden",
-    )
+  const sameOriginResponse = handleSameOriginRequirement(c, requestContext)
+  if (sameOriginResponse) {
+    return sameOriginResponse
   }
 
   await next()

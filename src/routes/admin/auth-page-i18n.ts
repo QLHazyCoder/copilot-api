@@ -6,7 +6,11 @@ export type AuthPageLocale = (typeof supportedAuthPageLocales)[number]
 
 export type AuthSetupMode = "initial" | "rotate" | "readonly"
 
-export type AuthSecretSource = "none" | "env-hash" | "env-secret" | "config-hash"
+export type AuthSecretSource =
+  | "none"
+  | "env-hash"
+  | "env-secret"
+  | "config-hash"
 
 type AuthPageMessages = Record<string, string>
 
@@ -50,10 +54,8 @@ const authPageMessages: Record<AuthPageLocale, AuthPageMessages> = {
     "setup.submit.rotate": "Save New Secret",
     "setup.backToAdmin": "Back to Admin",
     "setup.error.required": "Management secret is required.",
-    "setup.error.minLength":
-      "Management secret must be at least 8 characters.",
-    "setup.error.confirmMismatch":
-      "The confirmation secret does not match.",
+    "setup.error.minLength": "Management secret must be at least 8 characters.",
+    "setup.error.confirmMismatch": "The confirmation secret does not match.",
     "setup.error.failed": "Failed to save admin secret.",
   },
   "zh-CN": {
@@ -64,14 +66,12 @@ const authPageMessages: Record<AuthPageLocale, AuthPageMessages> = {
     "login.pageTitle": "Copilot API - Admin 登录",
     "login.badge": "管理入口",
     "login.title": "管理端登录",
-    "login.description":
-      "请输入管理密钥以访问 copilot-api 的后台管理页面。",
+    "login.description": "请输入管理密钥以访问 copilot-api 的后台管理页面。",
     "login.submit": "登录",
     "login.error.required": "请输入管理密钥。",
     "login.error.failed": "登录失败。",
     "login.error.invalid": "管理密钥无效。",
-    "login.error.rateLimited":
-      "登录失败次数过多，请稍后再试。",
+    "login.error.rateLimited": "登录失败次数过多，请稍后再试。",
     "setup.pageTitle": "Copilot API - Admin 初始化",
     "setup.badge": "管理安全",
     "setup.title.initial": "初始化 Admin 管理密钥",
@@ -148,25 +148,8 @@ export function getAuthPageMessages(locale: AuthPageLocale): AuthPageMessages {
   return authPageMessages[locale]
 }
 
-export function renderAuthPageLocaleScript(options: {
-  initialLocale: AuthPageLocale
-  mode?: AuthSetupMode
-  page: "login" | "setup"
-  requiresHttps: boolean
-  secretSource?: AuthSecretSource
-  sessionTtlDays: number
-  showForm?: boolean
-}): string {
-  const serializedMessages = JSON.stringify(authPageMessages)
-  const serializedLocales = JSON.stringify(supportedAuthPageLocales)
-  const serializedOptions = JSON.stringify(options)
-
-  return `<script>
-    const AUTH_PAGE_MESSAGES = ${serializedMessages};
-    const AUTH_PAGE_SUPPORTED_LOCALES = ${serializedLocales};
-    const AUTH_PAGE_CONFIG = ${serializedOptions};
-    const AUTH_PAGE_LOCALE_STORAGE_KEY = ${JSON.stringify(authPageLocaleStorageKey)};
-
+function renderAuthPageLocaleUtilities(): string {
+  return `
     function normalizeLocale(locale) {
       if (!locale || typeof locale !== 'string') return null;
       const lower = locale.trim().toLowerCase();
@@ -208,14 +191,11 @@ export function renderAuthPageLocaleScript(options: {
         element.textContent = value;
       }
     }
+  `
+}
 
-    function setHtml(id, value) {
-      const element = document.getElementById(id);
-      if (element) {
-        element.innerHTML = value;
-      }
-    }
-
+function renderAuthPageLoginLocaleScript(): string {
+  return `
     function applyLoginLocale() {
       setText('pageBadge', t('login.badge'));
       setText('pageTitleText', t('login.title'));
@@ -223,7 +203,11 @@ export function renderAuthPageLocaleScript(options: {
       setText('secretLabel', t('common.managementSecret'));
       setText('submitButtonText', t('login.submit'));
     }
+  `
+}
 
+function renderAuthPageSetupLocaleScript(): string {
+  return `
     function applySetupLocale() {
       setText('pageBadge', t('setup.badge'));
       setText('pageTitleText', t('setup.title.' + AUTH_PAGE_CONFIG.mode));
@@ -239,7 +223,11 @@ export function renderAuthPageLocaleScript(options: {
         setText('backToAdminButtonText', t('setup.backToAdmin'));
       }
     }
+  `
+}
 
+function renderAuthPageApplyLocaleScript(): string {
+  return `
     function applyLocale(locale, persist) {
       const normalized = normalizeLocale(locale) || 'en';
       if (!AUTH_PAGE_SUPPORTED_LOCALES.includes(normalized)) {
@@ -271,7 +259,11 @@ export function renderAuthPageLocaleScript(options: {
         } catch (_error) {}
       }
     }
+  `
+}
 
+function renderAuthPageBootstrapScript(): string {
+  return `
     window.__authPageLocale = {
       t,
       getCurrentLocale: function () { return currentLocale; },
@@ -288,5 +280,27 @@ export function renderAuthPageLocaleScript(options: {
     }
 
     applyLocale(currentLocale, true);
+  `
+}
+
+export function renderAuthPageLocaleScript(options: {
+  initialLocale: AuthPageLocale
+  mode?: AuthSetupMode
+  page: "login" | "setup"
+  requiresHttps: boolean
+  secretSource?: AuthSecretSource
+  sessionTtlDays: number
+  showForm?: boolean
+}): string {
+  const serializedMessages = JSON.stringify(authPageMessages)
+  const serializedLocales = JSON.stringify(supportedAuthPageLocales)
+  const serializedOptions = JSON.stringify(options)
+  const serializedStorageKey = JSON.stringify(authPageLocaleStorageKey)
+
+  return `<script>
+    const AUTH_PAGE_MESSAGES = ${serializedMessages};
+    const AUTH_PAGE_SUPPORTED_LOCALES = ${serializedLocales};
+    const AUTH_PAGE_CONFIG = ${serializedOptions};
+    const AUTH_PAGE_LOCALE_STORAGE_KEY = ${serializedStorageKey};${renderAuthPageLocaleUtilities()}${renderAuthPageLoginLocaleScript()}${renderAuthPageSetupLocaleScript()}${renderAuthPageApplyLocaleScript()}${renderAuthPageBootstrapScript()}
   </script>`
 }

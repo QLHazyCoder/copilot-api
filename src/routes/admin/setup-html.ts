@@ -9,35 +9,9 @@ import {
   renderAuthPageLocaleScript,
 } from "./auth-page-i18n"
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
-}
+type AuthPageMessages = ReturnType<typeof getAuthPageMessages>
 
-export function renderAdminSetupHtml(options: {
-  locale: AuthPageLocale
-  mode: AuthSetupMode
-  sessionTtlDays: number
-  secretSource: AuthSecretSource
-}): string {
-  const messages = getAuthPageMessages(options.locale)
-  const showForm = options.mode !== "readonly"
-  const title = messages[`setup.title.${options.mode}`]
-  const description = messages[`setup.description.${options.mode}`]
-  const submitLabel = messages[`setup.submit.${options.mode}`] ?? ""
-  const sourceText = messages[`setup.source.${options.secretSource}`]
-
-  return `<!DOCTYPE html>
-<html lang="${escapeHtml(options.locale)}">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${escapeHtml(messages["setup.pageTitle"])}</title>
-    <style>
+const SETUP_PAGE_STYLES = `
       :root {
         --bg-canvas: #0b1118;
         --panel: rgba(18, 30, 43, 0.96);
@@ -189,55 +163,9 @@ export function renderAdminSetupHtml(options: {
       .hint {
         font-size: 13px;
       }
-    </style>
-  </head>
-  <body>
-    <main class="panel">
-      <section class="header">
-        <div class="header-top">
-          <span class="badge" id="pageBadge">${escapeHtml(messages["setup.badge"])}</span>
-          <div class="language-box">
-            <label for="languageSelect" id="languageLabel">${escapeHtml(messages["language.label"])}</label>
-            <select id="languageSelect" aria-labelledby="languageLabel">
-              <option id="languageOptionEn" value="en">${escapeHtml(messages["language.en"])}</option>
-              <option id="languageOptionZh" value="zh-CN">${escapeHtml(messages["language.zhCN"])}</option>
-            </select>
-          </div>
-        </div>
-        <h1 id="pageTitleText">${escapeHtml(title)}</h1>
-        <p id="pageDescription">${escapeHtml(description)}</p>
-      </section>
-      <section class="body">
-        <div class="meta">
-          <p><strong id="secretSourceLabel">${escapeHtml(messages["setup.secretSource"])}</strong>: <span id="secretSourceValue">${escapeHtml(sourceText)}</span></p>
-        </div>
-        <div class="error" id="errorBox" role="alert"></div>
-        ${showForm ?
-          `<form id="setupForm">
-            <label for="adminSecret">
-              <span id="secretLabel">${escapeHtml(messages["common.managementSecret"])}</span>
-              <input id="adminSecret" name="adminSecret" type="password" autocomplete="new-password" required>
-            </label>
-            <label for="adminSecretConfirm">
-              <span id="confirmSecretLabel">${escapeHtml(messages["setup.confirmManagementSecret"])}</span>
-              <input id="adminSecretConfirm" name="adminSecretConfirm" type="password" autocomplete="new-password" required>
-            </label>
-            <p class="hint" id="setupHint">${escapeHtml(messages["setup.hint"])}</p>
-            <button id="submitButton" type="submit"><span id="submitButtonText">${escapeHtml(submitLabel)}</span></button>
-          </form>`
-        : `<a class="button-link" href="/admin"><span id="backToAdminButtonText">${escapeHtml(messages["setup.backToAdmin"])}</span></a>`}
-      </section>
-    </main>
-    ${renderAuthPageLocaleScript({
-      initialLocale: options.locale,
-      mode: options.mode,
-      page: "setup",
-      requiresHttps: false,
-      secretSource: options.secretSource,
-      sessionTtlDays: options.sessionTtlDays,
-      showForm,
-    })}
-    <script>
+`
+
+const SETUP_PAGE_SCRIPT = `
       const localeApi = window.__authPageLocale;
       const form = document.getElementById("setupForm");
       const errorBox = document.getElementById("errorBox");
@@ -314,7 +242,117 @@ export function renderAdminSetupHtml(options: {
 
         secretInput.focus();
       }
-    </script>
+`
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+}
+
+function renderSetupForm(
+  messages: AuthPageMessages,
+  submitLabel: string,
+): string {
+  return `<form id="setupForm">
+          <label for="adminSecret">
+            <span id="secretLabel">${escapeHtml(messages["common.managementSecret"])}</span>
+            <input id="adminSecret" name="adminSecret" type="password" autocomplete="new-password" required>
+          </label>
+          <label for="adminSecretConfirm">
+            <span id="confirmSecretLabel">${escapeHtml(messages["setup.confirmManagementSecret"])}</span>
+            <input id="adminSecretConfirm" name="adminSecretConfirm" type="password" autocomplete="new-password" required>
+          </label>
+          <p class="hint" id="setupHint">${escapeHtml(messages["setup.hint"])}</p>
+          <button id="submitButton" type="submit"><span id="submitButtonText">${escapeHtml(submitLabel)}</span></button>
+        </form>`
+}
+
+function renderReadonlySetupLink(messages: AuthPageMessages): string {
+  return `<a class="button-link" href="/admin"><span id="backToAdminButtonText">${escapeHtml(messages["setup.backToAdmin"])}</span></a>`
+}
+
+function renderSetupBody(options: {
+  description: string
+  messages: AuthPageMessages
+  showForm: boolean
+  sourceText: string
+  submitLabel: string
+  title: string
+}): string {
+  const bodyContent =
+    options.showForm ?
+      renderSetupForm(options.messages, options.submitLabel)
+    : renderReadonlySetupLink(options.messages)
+
+  return `<main class="panel">
+      <section class="header">
+        <div class="header-top">
+          <span class="badge" id="pageBadge">${escapeHtml(options.messages["setup.badge"])}</span>
+          <div class="language-box">
+            <label for="languageSelect" id="languageLabel">${escapeHtml(options.messages["language.label"])}</label>
+            <select id="languageSelect" aria-labelledby="languageLabel">
+              <option id="languageOptionEn" value="en">${escapeHtml(options.messages["language.en"])}</option>
+              <option id="languageOptionZh" value="zh-CN">${escapeHtml(options.messages["language.zhCN"])}</option>
+            </select>
+          </div>
+        </div>
+        <h1 id="pageTitleText">${escapeHtml(options.title)}</h1>
+        <p id="pageDescription">${escapeHtml(options.description)}</p>
+      </section>
+      <section class="body">
+        <div class="meta">
+          <p><strong id="secretSourceLabel">${escapeHtml(options.messages["setup.secretSource"])}</strong>: <span id="secretSourceValue">${escapeHtml(options.sourceText)}</span></p>
+        </div>
+        <div class="error" id="errorBox" role="alert"></div>
+        ${bodyContent}
+      </section>
+    </main>`
+}
+
+export function renderAdminSetupHtml(options: {
+  locale: AuthPageLocale
+  mode: AuthSetupMode
+  sessionTtlDays: number
+  secretSource: AuthSecretSource
+}): string {
+  const messages = getAuthPageMessages(options.locale)
+  const showForm = options.mode !== "readonly"
+  const title = messages[`setup.title.${options.mode}`]
+  const description = messages[`setup.description.${options.mode}`]
+  const submitLabel = messages[`setup.submit.${options.mode}`] ?? ""
+  const sourceText = messages[`setup.source.${options.secretSource}`]
+
+  return `<!DOCTYPE html>
+<html lang="${escapeHtml(options.locale)}">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escapeHtml(messages["setup.pageTitle"])}</title>
+    <style>${SETUP_PAGE_STYLES}    </style>
+  </head>
+  <body>
+    ${renderSetupBody({
+      description,
+      messages,
+      showForm,
+      sourceText,
+      submitLabel,
+      title,
+    })}
+    ${renderAuthPageLocaleScript({
+      initialLocale: options.locale,
+      mode: options.mode,
+      page: "setup",
+      requiresHttps: false,
+      secretSource: options.secretSource,
+      sessionTtlDays: options.sessionTtlDays,
+      showForm,
+    })}
+    <script>${SETUP_PAGE_SCRIPT}    </script>
   </body>
 </html>`
 }

@@ -21,7 +21,12 @@ function createAdminApp(): Hono {
 function getCookieHeader(response: Response): string {
   const setCookie = response.headers.get("set-cookie")
   expect(setCookie).toBeTruthy()
-  return setCookie!.split(";")[0]
+
+  if (!setCookie) {
+    throw new Error("expected set-cookie header")
+  }
+
+  return setCookie.split(";")[0]
 }
 
 beforeEach(async () => {

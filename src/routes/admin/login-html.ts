@@ -5,29 +5,9 @@ import {
   renderAuthPageLocaleScript,
 } from "./auth-page-i18n"
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
-}
+type AuthPageMessages = ReturnType<typeof getAuthPageMessages>
 
-export function renderAdminLoginHtml(options: {
-  locale: AuthPageLocale
-  sessionTtlDays: number
-  requiresHttps: boolean
-}): string {
-  const messages = getAuthPageMessages(options.locale)
-
-  return `<!DOCTYPE html>
-<html lang="${escapeHtml(options.locale)}">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${escapeHtml(messages["login.pageTitle"])}</title>
-    <style>
+const LOGIN_PAGE_STYLES = `
       :root {
         --bg-canvas: #0b1118;
         --bg-surface: #162231;
@@ -179,42 +159,9 @@ export function renderAdminLoginHtml(options: {
       .error.active {
         display: block;
       }
-    </style>
-  </head>
-  <body>
-    <main class="panel">
-      <section class="panel-header">
-        <div class="header-top">
-          <span class="eyebrow" id="pageBadge">${escapeHtml(messages["login.badge"])}</span>
-          <div class="language-box">
-            <label for="languageSelect" id="languageLabel">${escapeHtml(messages["language.label"])}</label>
-            <select id="languageSelect" aria-labelledby="languageLabel">
-              <option id="languageOptionEn" value="en">${escapeHtml(messages["language.en"])}</option>
-              <option id="languageOptionZh" value="zh-CN">${escapeHtml(messages["language.zhCN"])}</option>
-            </select>
-          </div>
-        </div>
-        <h1 id="pageTitleText">${escapeHtml(messages["login.title"])}</h1>
-        <p id="pageDescription">${escapeHtml(messages["login.description"])}</p>
-      </section>
-      <section class="panel-body">
-        <div class="error" id="errorBox" role="alert"></div>
-        <form id="loginForm">
-          <label for="adminSecret">
-            <span id="secretLabel">${escapeHtml(messages["common.managementSecret"])}</span>
-            <input id="adminSecret" name="adminSecret" type="password" autocomplete="current-password" required>
-          </label>
-          <button id="submitButton" type="submit"><span id="submitButtonText">${escapeHtml(messages["login.submit"])}</span></button>
-        </form>
-      </section>
-    </main>
-    ${renderAuthPageLocaleScript({
-      initialLocale: options.locale,
-      page: "login",
-      requiresHttps: options.requiresHttps,
-      sessionTtlDays: options.sessionTtlDays,
-    })}
-    <script>
+`
+
+const LOGIN_PAGE_SCRIPT = `
       const localeApi = window.__authPageLocale;
       const form = document.getElementById("loginForm");
       const input = document.getElementById("adminSecret");
@@ -280,7 +227,70 @@ export function renderAdminLoginHtml(options: {
       });
 
       input.focus();
-    </script>
+`
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+}
+
+function renderAdminLoginPanel(messages: AuthPageMessages): string {
+  return `<main class="panel">
+      <section class="panel-header">
+        <div class="header-top">
+          <span class="eyebrow" id="pageBadge">${escapeHtml(messages["login.badge"])}</span>
+          <div class="language-box">
+            <label for="languageSelect" id="languageLabel">${escapeHtml(messages["language.label"])}</label>
+            <select id="languageSelect" aria-labelledby="languageLabel">
+              <option id="languageOptionEn" value="en">${escapeHtml(messages["language.en"])}</option>
+              <option id="languageOptionZh" value="zh-CN">${escapeHtml(messages["language.zhCN"])}</option>
+            </select>
+          </div>
+        </div>
+        <h1 id="pageTitleText">${escapeHtml(messages["login.title"])}</h1>
+        <p id="pageDescription">${escapeHtml(messages["login.description"])}</p>
+      </section>
+      <section class="panel-body">
+        <div class="error" id="errorBox" role="alert"></div>
+        <form id="loginForm">
+          <label for="adminSecret">
+            <span id="secretLabel">${escapeHtml(messages["common.managementSecret"])}</span>
+            <input id="adminSecret" name="adminSecret" type="password" autocomplete="current-password" required>
+          </label>
+          <button id="submitButton" type="submit"><span id="submitButtonText">${escapeHtml(messages["login.submit"])}</span></button>
+        </form>
+      </section>
+    </main>`
+}
+
+export function renderAdminLoginHtml(options: {
+  locale: AuthPageLocale
+  sessionTtlDays: number
+  requiresHttps: boolean
+}): string {
+  const messages = getAuthPageMessages(options.locale)
+
+  return `<!DOCTYPE html>
+<html lang="${escapeHtml(options.locale)}">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escapeHtml(messages["login.pageTitle"])}</title>
+    <style>${LOGIN_PAGE_STYLES}    </style>
+  </head>
+  <body>
+    ${renderAdminLoginPanel(messages)}
+    ${renderAuthPageLocaleScript({
+      initialLocale: options.locale,
+      page: "login",
+      requiresHttps: options.requiresHttps,
+      sessionTtlDays: options.sessionTtlDays,
+    })}
+    <script>${LOGIN_PAGE_SCRIPT}    </script>
   </body>
 </html>`
 }

@@ -1,13 +1,13 @@
-import { promisify } from "node:util"
+import type { Context } from "hono"
+
+import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie"
 import {
   createHash,
   randomBytes,
   scrypt as scryptCallback,
   timingSafeEqual,
 } from "node:crypto"
-
-import type { Context } from "hono"
-import { deleteCookie, getSignedCookie, setSignedCookie } from "hono/cookie"
+import { promisify } from "node:util"
 
 import { getConfig, updateConfig, type ReadonlyAppConfig } from "./config"
 
@@ -22,6 +22,12 @@ const LOGIN_WINDOW_MS = 10 * 60 * 1000
 const MAX_LOGIN_ATTEMPTS = 5
 const ADMIN_SESSION_COOKIE_NAME = "copilot_admin_session"
 const ADMIN_SESSION_VERSION = 1
+const LOCALHOST_HOSTS = new Set([
+  "127.0.0.1",
+  "::1",
+  "::ffff:127.0.0.1",
+  "localhost",
+])
 
 type AdminSecretSource = "none" | "env-hash" | "env-secret" | "config-hash"
 
@@ -73,7 +79,7 @@ const revokedAdminSessions = new Map<string, number>()
 
 function normalizeSecretValue(value: string | undefined): string | undefined {
   const normalized = value?.trim()
-  return normalized ? normalized : undefined
+  return normalized || undefined
 }
 
 function getResolvedAdminSecret(
@@ -180,9 +186,7 @@ function encodeAdminSessionPayload(payload: AdminSessionPayload): string {
   return Buffer.from(JSON.stringify(payload), "utf8").toString("base64url")
 }
 
-function decodeAdminSessionPayload(
-  value: string,
-): AdminSessionPayload | null {
+function decodeAdminSessionPayload(value: string): AdminSessionPayload | null {
   try {
     const parsed = JSON.parse(
       Buffer.from(value, "base64url").toString("utf8"),
@@ -217,7 +221,10 @@ function cleanupExpiredRevokedAdminSessions(nowSeconds: number): void {
   }
 }
 
-function buildSessionCookieOptions(c: Context, maxAgeSeconds: number): {
+function buildSessionCookieOptions(
+  c: Context,
+  maxAgeSeconds: number,
+): {
   httpOnly: true
   maxAge: number
   path: "/admin"
@@ -229,45 +236,60 @@ function buildSessionCookieOptions(c: Context, maxAgeSeconds: number): {
     maxAge: maxAgeSeconds,
     path: "/admin",
     sameSite: "Strict",
-    secure: isSecureRequest(c) || (!isLocalhostRequest(c)),
+    secure: isSecureRequest(c) || !isLocalhostRequest(c),
   }
 }
 
-export function isLocalhostRequest(c: Context): boolean {
-  const forwardedFor = c.req.header("x-forwarded-for")
-  const realIp = c.req.header("x-real-ip")
-  const hostHeader = c.req.header("host") ?? ""
-  const forwardedHost = c.req.header("x-forwarded-host")?.split(",")[0]?.trim()
-  let requestHostname = ""
-
+function getRequestHostname(c: Context): string {
   try {
-    requestHostname = new URL(c.req.url).hostname
+    return new URL(c.req.url).hostname
   } catch {
-    requestHostname = ""
+    return ""
   }
+}
 
-  const clientIp =
-    forwardedFor?.split(",")[0]?.trim() ?? realIp?.trim() ?? ""
-  const hostCandidate = (forwardedHost || hostHeader || requestHostname)
-    .replace(/^\[/, "")
-    .replace(/\]$/, "")
-    .split(":")[0]
+function normalizeHost(value: string): string {
+  return value.replace(/^\[/, "").replace(/\]$/, "").split(":")[0] || ""
+}
+
+function getForwardedHost(c: Context): string {
+  return c.req.header("x-forwarded-host")?.split(",")[0]?.trim() || ""
+}
+
+function getClientIp(c: Context): string {
+  return (
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim()
+    || c.req.header("x-real-ip")?.trim()
+    || ""
+  )
+}
+
+function hasLocalhostHostHeader(hostHeader: string): boolean {
+  return (
+    hostHeader.startsWith("localhost")
+    || hostHeader.startsWith("127.0.0.1")
+    || hostHeader.startsWith("[::1]")
+  )
+}
+
+function isLoopbackHost(value: string): boolean {
+  return LOCALHOST_HOSTS.has(value)
+}
+
+export function isLocalhostRequest(c: Context): boolean {
+  const hostHeader = c.req.header("host") ?? ""
+  const requestHostname = getRequestHostname(c)
+  const clientIp = getClientIp(c)
+  const hostCandidate = normalizeHost(
+    getForwardedHost(c) || hostHeader || requestHostname,
+  )
 
   return (
-    clientIp === "127.0.0.1"
-    || clientIp === "::1"
-    || clientIp === "::ffff:127.0.0.1"
-    || clientIp === "localhost"
-    || requestHostname === "localhost"
-    || requestHostname === "127.0.0.1"
-    || requestHostname === "::1"
-    || hostCandidate === "localhost"
-    || hostCandidate === "127.0.0.1"
-    || hostCandidate === "::1"
+    isLoopbackHost(clientIp)
+    || isLoopbackHost(requestHostname)
+    || isLoopbackHost(hostCandidate)
     || (!clientIp
-      && (hostHeader.startsWith("localhost")
-        || hostHeader.startsWith("127.0.0.1")
-        || hostHeader.startsWith("[::1]")
+      && (hasLocalhostHostHeader(hostHeader)
         || requestHostname === "localhost"))
   )
 }
@@ -286,22 +308,19 @@ export function isSecureRequest(c: Context): boolean {
 }
 
 function getExpectedRequestOrigin(c: Context): string | null {
-  const host =
-    c.req.header("x-forwarded-host")?.split(",")[0]?.trim()
-    || c.req.header("host")?.trim()
+  const host = getForwardedHost(c) || c.req.header("host")?.trim()
   if (!host) {
     return null
   }
 
   const protocol = c.req.header("x-forwarded-proto")?.split(",")[0]?.trim()
-  const normalizedProtocol =
-    protocol || (isSecureRequest(c) ? "https" : "http")
+  const normalizedProtocol = protocol || (isSecureRequest(c) ? "https" : "http")
 
   return `${normalizedProtocol}://${host}`
 }
 
 export function isAdminWriteMethod(method: string): boolean {
-  return !(method === "GET" || method === "HEAD" || method === "OPTIONS")
+  return method !== "GET" && method !== "HEAD" && method !== "OPTIONS"
 }
 
 export function isSameOriginAdminRequest(c: Context): boolean {
@@ -495,7 +514,11 @@ export async function verifyAdminSecretHash(
 
   try {
     const expectedHash = Buffer.from(encodedHash, "base64url")
-    const derivedKey = (await scrypt(secret, salt, expectedHash.length)) as Buffer
+    const derivedKey = (await scrypt(
+      secret,
+      salt,
+      expectedHash.length,
+    )) as Buffer
     if (derivedKey.length !== expectedHash.length) {
       return false
     }
@@ -564,7 +587,7 @@ export function clearAdminSession(c: Context): void {
     httpOnly: true,
     path: "/admin",
     sameSite: "Strict",
-    secure: isSecureRequest(c) || (!isLocalhostRequest(c)),
+    secure: isSecureRequest(c) || !isLocalhostRequest(c),
   })
 }
 

@@ -273,10 +273,12 @@ function normalizeAdminAuthConfig(
   adminAuth: AdminAuthConfig | undefined,
 ): AdminAuthConfig {
   const sessionTtlDays =
-    typeof adminAuth?.sessionTtlDays === "number"
-    && Number.isFinite(adminAuth.sessionTtlDays)
-    && adminAuth.sessionTtlDays > 0
-    && Number.isInteger(adminAuth.sessionTtlDays) ?
+    (
+      typeof adminAuth?.sessionTtlDays === "number"
+      && Number.isFinite(adminAuth.sessionTtlDays)
+      && adminAuth.sessionTtlDays > 0
+      && Number.isInteger(adminAuth.sessionTtlDays)
+    ) ?
       adminAuth.sessionTtlDays
     : (defaultConfig.adminAuth?.sessionTtlDays ?? 5)
 
