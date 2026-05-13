@@ -67,7 +67,7 @@ export const githubHeaders = (githubToken: string) => ({
   "editor-version": `vscode/${state.vsCodeVersion}`,
   "editor-plugin-version": EDITOR_PLUGIN_VERSION,
   "user-agent": USER_AGENT,
-  "x-github-api-version": API_VERSION,
+  "x-github-api-version": "2022-11-28",
   "x-vscode-user-agent-library-version": "electron-fetch",
 })
 
